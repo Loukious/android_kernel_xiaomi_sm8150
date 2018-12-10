@@ -513,6 +513,7 @@ static int trie_get_next_key(struct bpf_map *map, void *key, void *next_key)
 }
 
 static int trie_check_btf(const struct bpf_map *map,
+			  const struct btf *btf,
 			  const struct btf_type *key_type,
 			  const struct btf_type *value_type)
 {
