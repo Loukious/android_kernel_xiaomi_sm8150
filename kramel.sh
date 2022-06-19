@@ -58,8 +58,8 @@ export MODULE=1
 
 # Requirements
 if [ "${ci}" != 1 ]; then
-    if ! hash dialog make curl wget unzip find 2>/dev/null; then
-        echo -e "\n\e[1;31m[✗] Install dialog, make, curl, wget, unzip, and find! \e[0m"
+    if ! hash dialog make curl wget unzip find zip 2>/dev/null; then
+        echo -e "\n\e[1;31m[✗] Install dialog, make, curl, wget, unzip, zip, and find! \e[0m"
         exit 1
     fi
 fi
@@ -104,9 +104,9 @@ if [[ "${COMPILER}" = gcc ]]; then
 
 elif [[ "${COMPILER}" = clang ]]; then
     if [ ! -d "${KDIR}/neutron-clang" ]; then
-        wget https://gitlab.com/dakkshesh07/neutron-clang/-/archive/Neutron-15/neutron-clang-Neutron-15.zip
-        unzip "${KDIR}"/neutron-clang-Neutron-15.zip
-        mv "${KDIR}"/neutron-clang-Neutron-15 "${KDIR}"/neutron-clang
+        wget https://gitlab.com/kslsdsdlkf/neutron-clang/-/archive/Neutron-16/neutron-clang-Neutron-16.zip
+        unzip "${KDIR}"/neutron-clang-Neutron-16.zip
+        mv "${KDIR}"/neutron-clang-Neutron-16 "${KDIR}"/neutron-clang
     fi
 
     KBUILD_COMPILER_STRING=$("${KDIR}"/neutron-clang/bin/clang -v 2>&1 | head -n 1 | sed 's/(https..*//' | sed 's/ version//')
