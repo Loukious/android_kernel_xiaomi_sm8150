@@ -54,6 +54,11 @@ modules.builtin
 /vmlinuz
 /System.map
 /Module.markers
+anykernel3-vayu/
+neutron-clang/
+modules/
+out/
+log.txt
 
 #
 # RPM spec file (make rpm-pkg)
@@ -131,3 +136,4 @@ kernel/configs/android-*.cfg
 #Ignoring Android.bp link file
 #
 Android.bp
+
