@@ -29,17 +29,17 @@ export DEVICE="POCO X3 Pro"
 export CODENAME="vayu/bhima"
 
 # Builder name.
-export BUILDER="ouroboros420"
+export BUILDER="Loukious"
 
 # Kernel repository URL.
-export REPO_URL="https://github.com/cyberknight777/nethunter_kernel_xiaomi_vayu"
+export REPO_URL="https://github.com/Loukious/android_kernel_xiaomi_sm8150/"
 
 # Commit hash of HEAD.
 COMMIT_HASH=$(git rev-parse --short HEAD)
 export COMMIT_HASH
 
 # Telegram Information. Set 1 to enable. | Set 0 to disable.
-export TGI=1
+export TGI=0
 export CHATID=325524231
 
 # Necessary variables to be exported.
