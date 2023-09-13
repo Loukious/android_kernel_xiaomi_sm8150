@@ -359,12 +359,12 @@ int pstore_mkfile(struct dentry *root, struct pstore_record *record)
 
 	switch (record->type) {
 	case PSTORE_TYPE_DMESG:
-		scnprintf(name, sizeof(name), "dmesg-%s-%llu%s",
+		scnprintf(name, sizeof(name), "console-%s-%llu%s",
 			  record->psi->name, record->id,
 			  record->compressed ? ".enc.z" : "");
 		break;
 	case PSTORE_TYPE_CONSOLE:
-		scnprintf(name, sizeof(name), "console-%s-%llu",
+		scnprintf(name, sizeof(name), "dmesg-%s-%llu",
 			  record->psi->name, record->id);
 		break;
 	case PSTORE_TYPE_FTRACE:
@@ -517,6 +517,8 @@ static int __init init_pstore_fs(void)
 #ifdef CONFIG_PSTORE_LAST_KMSG
 	struct proc_dir_entry *last_kmsg_entry = NULL;
 #endif
+
+	pstore_choose_compression();
 
 	/* Create a convenient mount point for people to access pstore */
 	err = sysfs_create_mount_point(fs_kobj, "pstore");
