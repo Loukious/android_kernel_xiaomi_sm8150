@@ -103,15 +103,14 @@ if [[ "${COMPILER}" = gcc ]]; then
     )
 
 elif [[ "${COMPILER}" = clang ]]; then
-    if [ ! -d "${KDIR}/neutron-clang" ]; then
-        wget https://gitlab.com/kslsdsdlkf/neutron-clang/-/archive/Neutron-16/neutron-clang-Neutron-16.zip
-        unzip "${KDIR}"/neutron-clang-Neutron-16.zip
-        mv "${KDIR}"/neutron-clang-Neutron-16 "${KDIR}"/neutron-clang
+    if [ ! -d "${KDIR}/google-clang" ]; then
+        echo "The 'clang' directory was not found in ${KDIR}. Please place 'clang' in the specified directory and run the script again."
+        exit 1
     fi
 
-    KBUILD_COMPILER_STRING=$("${KDIR}"/neutron-clang/bin/clang -v 2>&1 | head -n 1 | sed 's/(https..*//' | sed 's/ version//')
+    KBUILD_COMPILER_STRING=$("${KDIR}"/google-clang/bin/clang -v 2>&1 | head -n 1 | sed 's/(https..*//' | sed 's/ version//')
     export KBUILD_COMPILER_STRING
-    export PATH=$KDIR/neutron-clang/bin/:/usr/bin/:${PATH}
+    export PATH=$KDIR/google-clang/bin/:/usr/bin/:${PATH}
     MAKE+=(
         ARCH=arm64
         O=out
@@ -129,7 +128,7 @@ elif [[ "${COMPILER}" = clang ]]; then
 fi
 
 if [ ! -d "${KDIR}/anykernel3-vayu/" ]; then
-    git clone --depth=1 https://github.com/cyberknight777/anykernel3 -b vayu anykernel3-vayu
+    git clone --depth=1 https://github.com/Loukious/anykernel3 -b vayu anykernel3-vayu
 fi
 
 if [ "${ci}" != 1 ]; then

@@ -56,6 +56,7 @@ modules.builtin
 /Module.markers
 anykernel3-vayu/
 neutron-clang/
+google-clang/
 modules/
 out/
 log.txt
