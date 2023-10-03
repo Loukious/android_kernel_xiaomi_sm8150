@@ -104,7 +104,7 @@ if [[ "${COMPILER}" = gcc ]]; then
 
 elif [[ "${COMPILER}" = clang ]]; then
     if [ ! -d "${KDIR}/google-clang" ]; then
-        echo "The 'clang' directory was not found in ${KDIR}. Please place 'clang' in the specified directory and run the script again."
+        echo "The 'google-clang' directory was not found in ${KDIR}. Please place 'google-clang' in the specified directory and run the script again."
         exit 1
     fi
 
