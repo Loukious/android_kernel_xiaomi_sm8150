@@ -57,6 +57,7 @@ modules.builtin
 anykernel3-vayu/
 neutron-clang/
 google-clang/
+kali-nethunter-kernel/
 modules/
 out/
 log.txt
