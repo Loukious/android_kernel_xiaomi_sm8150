@@ -131,6 +131,6 @@ kernel/configs/android-*.cfg
 #Ignoring Android.bp link file
 #
 Android.bp
+log.txt
+neutron-clang
 out/
-logs.txt
-neutron-clang/
