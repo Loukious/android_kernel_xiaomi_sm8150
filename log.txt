@@ -1,0 +1,56 @@
+make[1]: Entering directory '/home/loukios/android_kernel_xiaomi_sm8150/out'
+  GEN     ./Makefile
+scripts/kconfig/conf  --silentoldconfig Kconfig
+  CHK     include/config/kernel.release
+  GEN     ./Makefile
+  CHK     include/generated/uapi/linux/version.h
+  CHK     scripts/mod/devicetable-offsets.h
+  Using .. as source for kernel
+  CHK     include/generated/utsrelease.h
+  CHK     include/generated/timeconst.h
+  CHK     include/generated/bounds.h
+  CHK     include/generated/asm-offsets.h
+  CALL    ../scripts/checksyscalls.sh
+  CHK     include/generated/compile.h
+  CHK     kernel/config_data.h
+  CHK     kernel/kheaders_data.tar.xz
+  DTC     arch/arm64/boot/dts/qcom/sm8150.dtb
+  DTC     arch/arm64/boot/dts/qcom/sm8150-v2.dtb
+  DTC     arch/arm64/boot/dts/qcom/sm8150p.dtb
+  DTC     arch/arm64/boot/dts/qcom/sm8150p-v2.dtb
+-- KernelSU Manager signature size: 0x033b
+-- KernelSU Manager signature hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+  DTC     arch/arm64/boot/dts/qcom/vayu-sm8150-overlay.dtbo
+  DTBOIMG arch/arm64/boot/dtbo.img
+  CC      drivers/net/wireless/realtek/rtl8xxxu/rtl8xxxu_8192e.o
+  CC      drivers/net/wireless/realtek/rtl8xxxu/rtl8xxxu_8723b.o
+  CC      drivers/net/wireless/realtek/rtl8xxxu/rtl8xxxu_8723a.o
+  CC      drivers/net/wireless/realtek/rtl8xxxu/rtl8xxxu_8192c.o
+  CC      drivers/net/wireless/realtek/rtl8xxxu/rtl8xxxu_8188e.o
+  AR      drivers/net/wireless/realtek/rtl8xxxu/rtl8xxxu.o
+  AR      drivers/net/wireless/realtek/rtl8xxxu/built-in.o
+  AR      drivers/net/wireless/realtek/built-in.o
+  AR      drivers/net/wireless/built-in.o
+  AR      drivers/net/built-in.o
+  AR      drivers/built-in.o
+  GEN     .version
+  CHK     include/generated/compile.h
+  UPD     include/generated/compile.h
+  CC      init/version.o
+  AR      init/built-in.o
+  AR      built-in.o
+  LTO     vmlinux.o
+  MODPOST vmlinux.o
+  KSYM    .tmp_kallsyms1.o
+  KSYM    .tmp_kallsyms2.o
+  LD      vmlinux
+  SORTEX  vmlinux
+  SYSMAP  System.map
+  OBJCOPY arch/arm64/boot/Image
+  GZIP    arch/arm64/boot/Image.gz
+  DTC     arch/arm64/boot/dts/qcom/sm8150-v2.dtb
+  DTC     arch/arm64/boot/dts/qcom/sm8150.dtb
+  DTC     arch/arm64/boot/dts/qcom/sm8150p-v2.dtb
+  DTC     arch/arm64/boot/dts/qcom/sm8150p.dtb
+  CAT     arch/arm64/boot/Image.gz-dtb
+make[1]: Leaving directory '/home/loukios/android_kernel_xiaomi_sm8150/out'
