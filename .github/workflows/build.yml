@@ -20,8 +20,5 @@ jobs:
           python-27: true
           aosp-clang-version: r383902
           ksu: true
-          nethunter: true
-          anykernel3: true
-          anykernel3-url: https://github.com/Loukious/AnyKernel3
           release: true
           access-token: ${{ secrets.access_token }}
