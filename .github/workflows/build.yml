@@ -18,7 +18,6 @@ jobs:
           aosp-gcc: true
           aosp-clang: true
           python-27: true
-          android-version: 14
           aosp-clang-version: r510928
           ksu: true
           nethunter: true
