@@ -18,7 +18,7 @@ jobs:
           aosp-gcc: true
           aosp-clang: true
           python-27: true
-          aosp-clang-version: r510928
+          aosp-clang-version: r383902
           ksu: true
           nethunter: true
           anykernel3: true
