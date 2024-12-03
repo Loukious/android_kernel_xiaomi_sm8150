@@ -370,6 +370,23 @@ static void show_vma_header_prefix_fake(struct seq_file *m,
 extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
 #endif
 
+static void show_vma_header_prefix_fake(struct seq_file *m,
+				   unsigned long start, unsigned long end,
+				   vm_flags_t flags, unsigned long long pgoff,
+				   dev_t dev, unsigned long ino)
+{
+	seq_setwidth(m, 25 + sizeof(void *) * 6 - 1);
+	seq_printf(m, "%08lx-%08lx %c%c%c%c %08llx %02x:%02x %lu ",
+		   start,
+		   end,
+		   flags & VM_READ ? 'r' : '-',
+		   flags & VM_WRITE ? 'w' : '-',
+		   flags & VM_EXEC ? '-' : '-',
+		   flags & VM_MAYSHARE ? 's' : 'p',
+		   pgoff,
+		   MAJOR(dev), MINOR(dev), ino);
+}
+
 static void
 show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
 {
@@ -406,13 +423,19 @@ bypass_orig_flow:
             	name = "/system/framework/framework-res.apk";
 		goto done;
             	 	}
+            	if (strstr(path, "jit-zygote-cache")) { 
+	  	start = vma->vm_start;
+		end = vma->vm_end;
+		show_vma_header_prefix_fake(m, start, end, flags, pgoff, dev, ino);
+		goto bypass;
+            	 	}
             	}
 	}
 
 	start = vma->vm_start;
 	end = vma->vm_end;
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
-
+bypass:
 	/*
 	 * Print the dentry name for named mappings, and a
 	 * special [heap] marker for the heap:
