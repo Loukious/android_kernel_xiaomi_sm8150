@@ -1,0 +1,8 @@
+[submodule "rtl8812au"]
+	path = drivers/staging/rtl8812au
+	url = https://github.com/aircrack-ng/rtl8812au.git
+    branch = v5.6.4.2
+[submodule "rtl8814au"]
+	path = drivers/staging/rtl8814au
+	url = https://github.com/aircrack-ng/rtl8814au.git
+    branch = v5.8.5.1
