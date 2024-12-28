@@ -6,3 +6,7 @@
 	path = drivers/staging/rtl8814au
 	url = https://github.com/aircrack-ng/rtl8814au.git
     branch = v5.8.5.1
+[submodule "KernelSU-Next"]
+	path = KernelSU-Next
+	url = https://github.com/rifsxd/KernelSU-Next.git
+	branch = next-susfs-4.14
