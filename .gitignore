@@ -9,7 +9,7 @@
 #
 # Normal rules (sorted alphabetically)
 #
-.*
+*.cmd
 *.a
 *.bin
 *.bz2
