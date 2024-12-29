@@ -54,6 +54,7 @@ fi
 # Setup environment
 SECONDS=0 # builtin bash timer
 ZIPNAME="CrDroid-$ZIP_PREFIX-Loukious-$2-$(date '+%Y%m%d-%H%M').zip"
+MZIPNAME="CrDroid-$ZIP_PREFIX-Modules-Loukious-$2-$(date '+%Y%m%d-%H%M').zip"
 export PROC="-j$(nproc)"
 
 echo "Building kernel with DEFCONFIG: $DEFCONFIG"
@@ -72,6 +73,30 @@ export STRIP="$TC_DIR/bin/$(echo "$(find "$TC_DIR/bin" -type f -name "aarch64-*-
 # Kernel Details
 KERNEL_VER="$(date '+%Y%m%d-%H%M')"
 OUT="$HOME/vayu/kernel-out"
+
+MAKE_PARAMS=(
+    O="$OUT"
+    ARCH=arm64
+    CLANG_PATH="$TC_DIR/bin"
+    CC="ccache clang"
+    CXX="ccache clang++"
+    HOSTCC="ccache clang"
+    HOSTCXX="ccache clang++"
+    LD=ld.lld
+    AR=llvm-ar
+    AS=llvm-as
+    NM=llvm-nm
+    OBJCOPY=llvm-objcopy
+    OBJDUMP=llvm-objdump
+    STRIP=llvm-strip
+    CROSS_COMPILE="aarch64-linux-gnu-"
+    CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
+    CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
+    KBUILD_BUILD_USER="Loukious"
+    KBUILD_BUILD_HOST="github"
+    LDFLAGS="--thinlto-cache-dir=$THINLTO_CACHE_DIR"
+)
+
 function clean_all {
 	cd $KERNEL_DIR
 	echo
@@ -83,65 +108,33 @@ clean_all
 echo
 echo "All Cleaned now."
 
-# Delete old file before build
-if [[ $1 = "-c" || $1 = "--clean" ]]; then
-	rm -rf $OUT
-fi
+function create_modules_zip {
+    find "${KERNEL_DIR}/out/modules" -type f -iname '*.ko' -exec cp {} "${KERNEL_DIR}/modules/system/lib/modules/" \;
+    cd "${KERNEL_DIR}/modules" || exit 1
+    zip -r9 "../$MZIPNAME" . -x ".git*" "README.md" "LICENSE" "*.zip"
+    echo -e "\n\e[1;32m[✓] Built Modules and packaged into $MZIPNAME! \e[0m"
+}
 
 # Make out folder
 mkdir -p $HOME/vayu/kernel-out
-make $PROC O=$OUT ARCH=arm64 $DEFCONFIG \
-	CLANG_PATH=$TC_DIR/bin \
-	CC="ccache clang" \
-	CXX="ccache clang++" \
-	HOSTCC="ccache clang" \
-	HOSTCXX="ccache clang++" \
-	LD=ld.lld \
-	AR=llvm-ar \
-	AS=llvm-as \
-	NM=llvm-nm \
-	OBJCOPY=llvm-objcopy \
-	OBJDUMP=llvm-objdump \
-	STRIP=llvm-strip \
-	CROSS_COMPILE="aarch64-linux-gnu-" \
-	CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
-	CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-	KBUILD_BUILD_USER="Loukious" \
-	KBUILD_BUILD_HOST="github" \
-	LDFLAGS="--thinlto-cache-dir=$THINLTO_CACHE_DIR"
-
-# Regened defconfig
-#  Test use ccache. -j$(nproc --all)
-if [[ $1 == "-r" || $1 == "--regen" ]]; then
-	cp $OUT/.config arch/arm64/configs/$DEFCONFIG
-	echo -e "\nRegened defconfig succesfully!"
-	exit 0
-else
-	echo -e "\nStarting compilation...\n"
-	make $PROC O=$OUT ARCH=arm64 \
-		CLANG_PATH=$TC_DIR/bin \
-		CC="ccache clang" \
-		CXX="ccache clang++" \
-		HOSTCC="ccache clang" \
-		HOSTCXX="ccache clang++" \
-		LD=ld.lld \
-		AR=llvm-ar \
-		AS=llvm-as \
-		NM=llvm-nm \
-		OBJCOPY=llvm-objcopy \
-		OBJDUMP=llvm-objdump \
-		STRIP=llvm-strip \
-		CROSS_COMPILE="aarch64-linux-gnu-" \
-		CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
-		CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-		KBUILD_BUILD_USER="Loukious" \
-    	KBUILD_BUILD_HOST="github" \
-		LDFLAGS="--thinlto-cache-dir=$THINLTO_CACHE_DIR"
+make $PROC "${MAKE_PARAMS[@]}" $DEFCONFIG 
+echo -e "\nStarting compilation...\n"
+make $PROC "${MAKE_PARAMS[@]}"
+if [ "$(echo "$1" | tr '[:upper:]' '[:lower:]')" == "nethunter" ]; then
+	if [ ! -d "${KERNEL_DIR}/modules" ]; then
+		echo -e "\n\e[1;93m[*] Cloning modules repository! \e[0m"
+		git clone --depth=1 https://github.com/neternels/neternels-modules "${KERNEL_DIR}/modules"
+	fi
+	make $PROC "${MAKE_PARAMS[@]}" modules_prepare
+	make $PROC "${MAKE_PARAMS[@]}" INSTALL_MOD_PATH="${KERNEL_DIR}/out/modules" modules
+	make $PROC "${MAKE_PARAMS[@]}" INSTALL_MOD_PATH="${KERNEL_DIR}/out/modules" modules_install
+	create_modules_zip
 fi
 
 # Creating zip flashable file
 function create_zip {
 	#Copy AK3 to out/Anykernel3
+	cd $KERNEL_DIR
 	cp -r $AK3_DIR AnyKernel3
 	cp $OUT/arch/arm64/boot/Image AnyKernel3
 
