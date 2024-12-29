@@ -106,6 +106,8 @@ make $PROC O=$OUT ARCH=arm64 $DEFCONFIG \
 	CROSS_COMPILE="aarch64-linux-gnu-" \
 	CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
 	CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+	KBUILD_BUILD_USER="Loukious" \
+	KBUILD_BUILD_HOST="github" \
 	LDFLAGS="--thinlto-cache-dir=$THINLTO_CACHE_DIR"
 
 # Regened defconfig
@@ -132,6 +134,8 @@ else
 		CROSS_COMPILE="aarch64-linux-gnu-" \
 		CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
 		CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+		KBUILD_BUILD_USER="Loukious" \
+    	KBUILD_BUILD_HOST="github" \
 		LDFLAGS="--thinlto-cache-dir=$THINLTO_CACHE_DIR"
 fi
 
