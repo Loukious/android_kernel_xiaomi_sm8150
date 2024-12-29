@@ -143,8 +143,7 @@ fi
 function create_zip {
 	#Copy AK3 to out/Anykernel3
 	cp -r $AK3_DIR AnyKernel3
-	cp $OUT/arch/arm64/boot/Image.gz AnyKernel3
-	cp $OUT/arch/arm64/boot/dtbo.img AnyKernel3
+	cp $OUT/arch/arm64/boot/Image AnyKernel3
 
 	# Change dir to AK3 to make zip kernel
 	cd AnyKernel3
@@ -159,7 +158,7 @@ function create_zip {
 }
 
 
-if [ -f "$OUT/arch/arm64/boot/Image.gz" ] && [ -f "$OUT/arch/arm64/boot/dtbo.img" ]; then
+if [ -f "$OUT/arch/arm64/boot/Image" ]; then
 	echo -e "\nKernel compiled succesfully!\n"
 	create_zip
 	echo -e "\nDone !"
