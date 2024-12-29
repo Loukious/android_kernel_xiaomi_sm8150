@@ -20,9 +20,15 @@ jobs:
     - name: Create Git Tag
       run: |
         git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git tag "v${{ github.event.inputs.version }}"
-        git push origin "v${{ github.event.inputs.version }}"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ github.event.inputs.version }} already exists. Skipping tag creation."
+            exit 0
+          else
+            git tag "v${{ github.event.inputs.version }}"
+            git push origin "v${{ github.event.inputs.version }}"
+          fi
 
   build:
     needs: create-tag
@@ -40,18 +46,26 @@ jobs:
     - name: Set up build environment
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential ccache gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libarchive-tools python2
+        sudo apt-get install -y build-essential ccache gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libarchive-tools python2 make
+        make --version
 
     - name: Restore Toolchain Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
+      id: cache-toolchain
       with:
         path: /home/runner/toolchains
         key: ${{ runner.os }}-toolchain-
         restore-keys: |
           ${{ runner.os }}-toolchain-
 
+    - name: Configure Toolchain if Cache Restored
+      if: steps.cache-toolchain.outputs.cache-hit == 'true'
+      run: |
+        export PATH="/home/runner/toolchains/neutron-clang/bin:$PATH"
+        bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") --patch=glibc
+
     - name: Restore ThinLTO Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: /tmp/thinlto-cache
         key: ${{ runner.os }}-thinlto-
@@ -64,17 +78,18 @@ jobs:
     - name: Run build script
       run: |
         cd $GITHUB_WORKSPACE
+        ulimit -s unlimited
         chmod +x ./build.sh
         ./build.sh ${{ matrix.target }} v${{ github.event.inputs.version }}
 
     - name: Save Toolchain Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/toolchains
         key: ${{ runner.os }}-toolchain-
 
     - name: Save ThinLTO Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: /tmp/thinlto-cache
         key: ${{ runner.os }}-thinlto-
