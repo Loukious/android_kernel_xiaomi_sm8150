@@ -33,20 +33,27 @@ else
 fi
 
 # Handle DEFCONFIG argument
-if [ "$1" == "nethunter" ]; then
+if [ "$(echo "$1" | tr '[:upper:]' '[:lower:]')" == "nethunter" ]; then
     DEFCONFIG="nethunter_defconfig"
     ZIP_PREFIX="NetHunter"
-elif [ "$1" == "vayu" ]; then
+elif [ "$(echo "$1" | tr '[:upper:]' '[:lower:]')" == "vayu" ]; then
     DEFCONFIG="vayu_user_defconfig"
     ZIP_PREFIX="Vayu"
 else
-    echo "Usage: $0 [nethunter|vayu]"
+    echo "Usage: $0 [nethunter|vayu] [version]"
     exit 1
+fi
+
+# Check if version argument is empty
+if [ -z "$2" ]; then
+	echo "Version argument is empty!"
+	echo "Usage: $0 [nethunter|vayu] [version]"
+	exit 1
 fi
 
 # Setup environment
 SECONDS=0 # builtin bash timer
-ZIPNAME="CrDroid-$ZIP_PREFIX-Loukious-$(git describe --abbrev=0 --tags)-$(date '+%Y%m%d-%H%M').zip"
+ZIPNAME="CrDroid-$ZIP_PREFIX-Loukious-$2-$(date '+%Y%m%d-%H%M').zip"
 export PROC="-j$(nproc)"
 
 echo "Building kernel with DEFCONFIG: $DEFCONFIG"
