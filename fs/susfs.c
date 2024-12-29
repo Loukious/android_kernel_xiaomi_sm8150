@@ -231,18 +231,9 @@ void susfs_auto_add_sus_ksu_default_mount(const char __user *to_pathname) {
 	// Here we need to re-retrieve the struct path as we want the new struct path, not the old one
 	if (strncpy_from_user(pathname, to_pathname, SUSFS_MAX_LEN_PATHNAME-1) < 0)
 		return;
-	if ((!strncmp(pathname, "/data/adb/modules", 17) ||
-		 !strncmp(pathname, "/debug_ramdisk", 14) ||
-		 !strncmp(pathname, "/system", 7) ||
-		 !strncmp(pathname, "/system_ext", 11) ||
-		 !strncmp(pathname, "/vendor", 7) ||
-		 !strncmp(pathname, "/product", 8) ||
-		 !strncmp(pathname, "/odm", 4)) &&
-		 !kern_path(pathname, LOOKUP_FOLLOW, &path)) {
-		goto set_inode_sus_mount;
+	if (kern_path(pathname, LOOKUP_FOLLOW, &path)) {
+			return;
 	}
-	return;
-set_inode_sus_mount:
 	inode = path.dentry->d_inode;
 	if (!inode) return;
 	spin_lock(&inode->i_lock);
