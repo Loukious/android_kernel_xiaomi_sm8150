@@ -1,0 +1,114 @@
+name: Build Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The new version number (e.g., 1.1)"
+        required: true
+      changelog:
+        description: "The changelog for this version"
+        required: true
+
+jobs:
+  create-tag:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Create Git Tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag "v${{ github.event.inputs.version }}"
+        git push origin "v${{ github.event.inputs.version }}"
+
+  build:
+    needs: create-tag
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [Vayu, NetHunter]
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - name: Set up build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential ccache gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libarchive-tools python2
+
+    - name: Restore Toolchain Cache
+      uses: actions/cache@v3
+      with:
+        path: /home/runner/toolchains
+        key: ${{ runner.os }}-toolchain-
+        restore-keys: |
+          ${{ runner.os }}-toolchain-
+
+    - name: Restore ThinLTO Cache
+      uses: actions/cache@v3
+      with:
+        path: /tmp/thinlto-cache
+        key: ${{ runner.os }}-thinlto-
+        restore-keys: |
+          ${{ runner.os }}-thinlto-
+
+    - name: Ensure ThinLTO Cache Directory
+      run: mkdir -p /tmp/thinlto-cache
+
+    - name: Run build script
+      run: |
+        cd $GITHUB_WORKSPACE
+        chmod +x ./build.sh
+        ./build.sh ${{ matrix.target }} v${{ github.event.inputs.version }}
+
+    - name: Save Toolchain Cache
+      uses: actions/cache@v3
+      with:
+        path: /home/runner/toolchains
+        key: ${{ runner.os }}-toolchain-
+
+    - name: Save ThinLTO Cache
+      uses: actions/cache@v3
+      with:
+        path: /tmp/thinlto-cache
+        key: ${{ runner.os }}-thinlto-
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.target }}-kernel
+        path: |
+          ${{ github.workspace }}/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Build Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Vayu-kernel
+        path: ./artifacts/Vayu
+
+    - name: Download Build Artifacts (Nethunter)
+      uses: actions/download-artifact@v4
+      with:
+        name: NetHunter-kernel
+        path: ./artifacts/NetHunter
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "v${{ github.event.inputs.version }}"
+        body: ${{ github.event.inputs.changelog }}
+        files: |
+          ./artifacts/Vayu/*.zip
+          ./artifacts/NetHunter/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
