@@ -9,11 +9,11 @@
 #
 # Normal rules (sorted alphabetically)
 #
-*.cmd
 *.a
 *.bin
 *.bz2
 *.c.[012]*.*
+*.cmd
 *.dtb
 *.dtb.S
 *.dwo
@@ -54,6 +54,7 @@ modules.builtin
 /vmlinuz
 /System.map
 /Module.markers
+/out
 
 #
 # RPM spec file (make rpm-pkg)
