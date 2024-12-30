@@ -16,8 +16,6 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
     - name: Create Git Tag
       run: |
         git config user.name "github-actions[bot]"
@@ -36,8 +34,8 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 1
-        submodules: true
+        fetch-depth: 0
+        submodules: 'recursive'
 
     - name: Set up build environment
       run: |
