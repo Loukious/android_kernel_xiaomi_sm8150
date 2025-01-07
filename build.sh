@@ -109,6 +109,9 @@ echo
 echo "All Cleaned now."
 
 function create_modules_zip {
+	if [ ! -d "${KERNEL_DIR}/modules/system/lib/modules" ]; then
+		mkdir -p "${KERNEL_DIR}/modules/system/lib/modules"
+	fi
     find "${KERNEL_DIR}/out/modules" -type f -iname '*.ko' -exec cp {} "${KERNEL_DIR}/modules/system/lib/modules/" \;
     cd "${KERNEL_DIR}/modules" || exit 1
     zip -r9 "../$MZIPNAME" . -x ".git*" "README.md" "LICENSE" "*.zip"
