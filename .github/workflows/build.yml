@@ -47,50 +47,12 @@ jobs:
         mkdir -p /tmp/s
         ln -s $GITHUB_WORKSPACE/* /tmp/s
 
-    - name: Restore Toolchain Cache
-      uses: actions/cache@v4
-      id: cache-toolchain
-      with:
-        path: /home/runner/toolchains
-        key: ${{ runner.os }}-toolchain-
-        restore-keys: |
-          ${{ runner.os }}-toolchain-
-
-    - name: Configure Toolchain if Cache Restored
-      if: steps.cache-toolchain.outputs.cache-hit == 'true'
-      run: |
-        export PATH="/home/runner/toolchains/neutron-clang/bin:$PATH"
-        bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") --patch=glibc
-
-    - name: Restore ThinLTO Cache
-      uses: actions/cache@v4
-      with:
-        path: /tmp/thinlto-cache
-        key: ${{ runner.os }}-thinlto-
-        restore-keys: |
-          ${{ runner.os }}-thinlto-
-
-    - name: Ensure ThinLTO Cache Directory
-      run: mkdir -p /tmp/thinlto-cache
 
     - name: Run build script
       run: |
         cd /tmp/s
         chmod +x ./build.sh
         ./build.sh ${{ matrix.target }} v${{ github.event.inputs.version }}
-
-    - name: Save Toolchain Cache
-      if: steps.cache-toolchain.outputs.cache-hit == 'false'
-      uses: actions/cache@v4
-      with:
-        path: /home/runner/toolchains
-        key: ${{ runner.os }}-toolchain-
-
-    - name: Save ThinLTO Cache
-      uses: actions/cache@v4
-      with:
-        path: /tmp/thinlto-cache
-        key: ${{ runner.os }}-thinlto-
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
