@@ -21,6 +21,41 @@ else
 	cd $KERNEL_DIR
 fi
 
+declare -A submodules
+submodules=(
+    ["drivers/staging/rtl8812au"]="https://github.com/Loukious/rtl8812au.git v5.6.4.2"
+    ["drivers/staging/rtl8814au"]="https://github.com/aircrack-ng/rtl8814au.git v5.8.5.1"
+    ["KernelSU-Next"]="https://github.com/rifsxd/KernelSU-Next.git next"
+)
+
+# Iterate through the submodules and clone them
+for path in "${!submodules[@]}"; do
+    # Extract the URL and branch
+    repo_info=(${submodules[$path]})
+    url=${repo_info[0]}
+    branch=${repo_info[1]}
+
+    # Create the directory if it doesn't exist
+    mkdir -p "$KERNEL_DIR/$(dirname "$path")"
+
+    # Clone the repository
+    echo "Cloning $url into $KERNEL_DIR/$path (branch: $branch)"
+    git clone -b "$branch" "$url" "$KERNEL_DIR/$path"
+done
+
+KERNELSU_SOURCE="$KERNEL_DIR/KernelSU-Next/kernel"
+KERNELSU_LINK="$KERNEL_DIR/drivers/kernelsu"
+
+if [ -d "$KERNELSU_SOURCE" ]; then
+    echo "Creating symbolic link from $KERNELSU_SOURCE to $KERNELSU_LINK"
+    ln -sfn "$KERNELSU_SOURCE" "$KERNELSU_LINK"
+    echo "Symbolic link created."
+else
+    echo "Source directory $KERNELSU_SOURCE does not exist. Cannot create symbolic link."
+fi
+
+echo "All submodules cloned and symbolic link created successfully."
+
 if ! [ -d "$TC_DIR" ]; then
 	echo "$TC_DIR not found! Setting it up..."
 	mkdir -p $TC_DIR
