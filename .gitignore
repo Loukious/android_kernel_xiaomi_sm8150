@@ -39,6 +39,7 @@
 *.symtypes
 *.tar
 *.xz
+*.zip
 Module.symvers
 modules.builtin
 
@@ -126,6 +127,7 @@ all.config
 
 # fetched Android config fragments
 kernel/configs/android-*.cfg
+KernelSU-Next
 
 #
 #Ignoring Android.bp link file
