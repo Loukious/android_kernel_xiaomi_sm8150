@@ -7022,7 +7022,6 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
 			aux = &env->insn_aux_data[i + delta];
 			if (bpf_map_ptr_poisoned(aux))
 				goto patch_call_imm;
-
 			map_ptr = BPF_MAP_PTR(aux->map_state);
 			if (!map_ptr->ops->map_gen_lookup)
 				goto patch_call_imm;
@@ -7147,9 +7146,6 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
 			goto err_unlock;
 
 		ret = -ENOMEM;
-		log->kbuf = vmalloc(log->len_total);
-		if (!log->kbuf)
-			goto err_unlock;
 	}
 
 	env->strict_alignment = !!(attr->prog_flags & BPF_F_STRICT_ALIGNMENT);
