@@ -203,7 +203,7 @@ TRACE_EVENT(rot_bw_ao_as_context,
 
 #define SDE_ROT_TRACE_EVTLOG_SIZE	15
 TRACE_EVENT(sde_rot_evtlog,
-	TP_PROTO(const char *tag, u32 tag_id, u32 cnt, u32 data[]),
+	TP_PROTO(const char *tag, u32 tag_id, u32 cnt, u32 *data),
 	TP_ARGS(tag, tag_id, cnt, data),
 	TP_STRUCT__entry(
 			__field(int, pid)
