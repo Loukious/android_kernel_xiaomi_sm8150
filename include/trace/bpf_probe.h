@@ -33,7 +33,7 @@
 		   __builtin_choose_expr(size == 2, (u16)2, \
 		   __builtin_choose_expr(size == 4, (u32)3, \
 		   __builtin_choose_expr(size == 8, (u64)4, \
-					 (void)5)))))
+					 (u64)0)))))
 #define __CAST_TO_U64(x) ({ \
 	typeof(x) __src = (x); \
 	UINTTYPE(sizeof(x)) __dst; \
