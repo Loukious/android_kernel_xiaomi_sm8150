@@ -44,6 +44,7 @@ static bool disable_scofix;
 static bool force_scofix;
 
 static bool reset = true;
+static bool disable_fake_csr_forcesuspend_hack;
 
 static struct usb_driver btusb_driver;
 
@@ -1539,6 +1540,7 @@ static int btusb_setup_csr(struct hci_dev *hdev)
 {
 	struct hci_rp_read_local_version *rp;
 	struct sk_buff *skb;
+	bool is_fake = false;
 
 	BT_DBG("%s", hdev->name);
 
@@ -1558,18 +1560,98 @@ static int btusb_setup_csr(struct hci_dev *hdev)
 
 	rp = (struct hci_rp_read_local_version *)skb->data;
 
-	/* Detect controllers which aren't real CSR ones. */
-	if (le16_to_cpu(rp->manufacturer) != 10 ||
-	    le16_to_cpu(rp->lmp_subver) == 0x0c5c) {
-		/* Clear the reset quirk since this is not an actual
-		 * early Bluetooth 1.1 device from CSR.
-		 */
-		clear_bit(HCI_QUIRK_RESET_ON_CLOSE, &hdev->quirks);
+	bt_dev_info(hdev, "CSR: Setting up dongle with HCI ver=%u rev=%04x; LMP ver=%u subver=%04x; manufacturer=%u",
+		le16_to_cpu(rp->hci_ver), le16_to_cpu(rp->hci_rev),
+		le16_to_cpu(rp->lmp_ver), le16_to_cpu(rp->lmp_subver),
+		le16_to_cpu(rp->manufacturer));
 
-		/* These fake CSR controllers have all a broken
-		 * stored link key handling and so just disable it.
+	/* Detect a wide host of Chinese controllers that aren't CSR.
+	 *
+	 * Known fake bcdDevices: 0x0100, 0x0134, 0x1915, 0x2520, 0x7558, 0x8891
+	 *
+	 * The main thing they have in common is that these are really popular low-cost
+	 * options that support newer Bluetooth versions but rely on heavy VID/PID
+	 * squatting of this poor old Bluetooth 1.1 device. Even sold as such.
+	 *
+	 * We detect actual CSR devices by checking that the HCI manufacturer code
+	 * is Cambridge Silicon Radio (10) and ensuring that LMP sub-version and
+	 * HCI rev values always match. As they both store the firmware number.
+	 */
+	if (le16_to_cpu(rp->manufacturer) != 10 ||
+	    le16_to_cpu(rp->hci_rev) != le16_to_cpu(rp->lmp_subver))
+		is_fake = true;
+
+	/* Known legit CSR firmware build numbers and their supported BT versions:
+	 * - 1.1 (0x1) -> 0x0073, 0x020d, 0x033c, 0x034e
+	 * - 1.2 (0x2) ->                 0x04d9, 0x0529
+	 * - 2.0 (0x3) ->         0x07a6, 0x07ad, 0x0c5c
+	 * - 2.1 (0x4) ->         0x149c, 0x1735, 0x1899 (0x1899 is a BlueCore4-External)
+	 * - 4.0 (0x6) ->         0x1d86, 0x2031, 0x22bb
+	 *
+	 * e.g. Real CSR dongles with LMP subversion 0x73 are old enough that
+	 *      support BT 1.1 only; so it's a dead giveaway when some
+	 *      third-party BT 4.0 dongle reuses it.
+	 */
+	else if (le16_to_cpu(rp->lmp_subver) <= 0x034e &&
+		 le16_to_cpu(rp->hci_ver) > BLUETOOTH_VER_1_1)
+		is_fake = true;
+
+	else if (le16_to_cpu(rp->lmp_subver) <= 0x0529 &&
+		 le16_to_cpu(rp->hci_ver) > BLUETOOTH_VER_1_2)
+		is_fake = true;
+
+	else if (le16_to_cpu(rp->lmp_subver) <= 0x0c5c &&
+		 le16_to_cpu(rp->hci_ver) > BLUETOOTH_VER_2_0)
+		is_fake = true;
+
+	else if (le16_to_cpu(rp->lmp_subver) <= 0x1899 &&
+		 le16_to_cpu(rp->hci_ver) > BLUETOOTH_VER_2_1)
+		is_fake = true;
+
+	else if (le16_to_cpu(rp->lmp_subver) <= 0x22bb &&
+		 le16_to_cpu(rp->hci_ver) > BLUETOOTH_VER_4_0)
+		is_fake = true;
+
+	if (is_fake) {
+		bt_dev_warn(hdev, "CSR: Unbranded CSR clone detected; adding workarounds...");
+
+		/* Generally these clones have big discrepancies between
+		 * advertised features and what's actually supported.
+		 * Probably will need to be expanded in the future;
+		 * without these the controller will lock up.
 		 */
 		set_bit(HCI_QUIRK_BROKEN_STORED_LINK_KEY, &hdev->quirks);
+		set_bit(HCI_QUIRK_BROKEN_ERR_DATA_REPORTING, &hdev->quirks);
+		set_bit(HCI_QUIRK_BROKEN_FILTER_CLEAR_ALL, &hdev->quirks);
+
+		/* Many fake CSR clones lie about supporting
+		 * HCI_OP_READ_LOCAL_COMMANDS (BT 1.2+), causing a command
+		 * timeout that stalls initialisation.  Skipping it avoids
+		 * the hang.
+		 */
+		set_bit(HCI_QUIRK_BROKEN_LOCAL_COMMANDS, &hdev->quirks);
+
+		/* Suppress the HCI Reset sent by hci_init1_req(): cheap clone
+		 * firmware cannot cope with a Reset immediately after the
+		 * READ_LOCAL_VERSION we just sent in setup_csr, and the rapid
+		 * back-to-back Reset+Read burst causes an EPROTO USB disconnect.
+		 * Setting RESET_ON_CLOSE moves the Reset to teardown time so
+		 * init1 skips it entirely.
+		 */
+		set_bit(HCI_QUIRK_RESET_ON_CLOSE, &hdev->quirks);
+		clear_bit(HCI_QUIRK_SIMULTANEOUS_DISCOVERY, &hdev->quirks);
+
+		/* These fake dongles commonly claim to support BT4.0/LE via
+		 * the LMP_LE feature bit but they are purely BR/EDR devices.
+		 * Sending LE init commands (e.g. HCI_OP_WRITE_LE_HOST_SUPPORTED)
+		 * causes them to reply with HCI status 0x12 "Unsupported
+		 * Parameter Value", which bt_to_errno() converts to EINVAL,
+		 * aborting hci_dev_open with "Can't init device: Invalid argument".
+		 * Strip the LE and NO_BREDR feature bits so the stack treats
+		 * this as a plain BR/EDR controller.
+		 */
+		hdev->features[0][4] &= ~LMP_LE;
+		hdev->features[0][4] &= ~LMP_NO_BREDR;
 	}
 
 	kfree_skb(skb);
@@ -3217,11 +3299,13 @@ static int btusb_probe(struct usb_interface *intf,
 		if (bcdDevice < 0x117)
 			set_bit(HCI_QUIRK_RESET_ON_CLOSE, &hdev->quirks);
 
-		/* Fake CSR devices with broken commands */
-		if (bcdDevice <= 0x100 || bcdDevice == 0x134)
-			hdev->setup = btusb_setup_csr;
-
+		/* This must be set first in case we disable it for fakes */
 		set_bit(HCI_QUIRK_SIMULTANEOUS_DISCOVERY, &hdev->quirks);
+
+		/* Fake CSR devices with broken commands */
+		if (le16_to_cpu(udev->descriptor.idVendor)  == 0x0a12 &&
+		    le16_to_cpu(udev->descriptor.idProduct) == 0x0001)
+			hdev->setup = btusb_setup_csr;
 	}
 
 	if (id->driver_info & BTUSB_SNIFFER) {
@@ -3466,6 +3550,9 @@ MODULE_PARM_DESC(force_scofix, "Force fixup of wrong SCO buffers size");
 
 module_param(reset, bool, 0644);
 MODULE_PARM_DESC(reset, "Send HCI reset command on initialization");
+
+module_param(disable_fake_csr_forcesuspend_hack, bool, 0644);
+MODULE_PARM_DESC(disable_fake_csr_forcesuspend_hack, "Don't indiscriminately force-suspend Chinese-cloned CSR dongles trying to unfreeze them");
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
 MODULE_DESCRIPTION("Generic Bluetooth USB driver ver " VERSION);
