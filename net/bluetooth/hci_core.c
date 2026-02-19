@@ -298,8 +298,10 @@ static void bredr_setup(struct hci_request *req)
 	hci_req_add(req, HCI_OP_READ_CURRENT_IAC_LAP, 0, NULL);
 
 	/* Clear Event Filters */
-	flt_type = HCI_FLT_CLEAR_ALL;
-	hci_req_add(req, HCI_OP_SET_EVENT_FLT, 1, &flt_type);
+	if (!test_bit(HCI_QUIRK_BROKEN_FILTER_CLEAR_ALL, &req->hdev->quirks)) {
+		flt_type = HCI_FLT_CLEAR_ALL;
+		hci_req_add(req, HCI_OP_SET_EVENT_FLT, 1, &flt_type);
+	}
 
 	/* Connection accept timeout ~20 secs */
 	param = cpu_to_le16(0x7d00);
@@ -827,15 +829,19 @@ static int __hci_init(struct hci_dev *hdev)
 	int err;
 
 	err = __hci_req_sync(hdev, hci_init1_req, 0, HCI_INIT_TIMEOUT, NULL);
-	if (err < 0)
+	if (err < 0) {
+		bt_dev_err(hdev, "CSR dbg: init1_req failed err=%d", err);
 		return err;
+	}
 
 	if (hci_dev_test_flag(hdev, HCI_SETUP))
 		hci_debugfs_create_basic(hdev);
 
 	err = __hci_req_sync(hdev, hci_init2_req, 0, HCI_INIT_TIMEOUT, NULL);
-	if (err < 0)
+	if (err < 0) {
+		bt_dev_err(hdev, "CSR dbg: init2_req failed err=%d", err);
 		return err;
+	}
 
 	/* HCI_PRIMARY covers both single-mode LE, BR/EDR and dual-mode
 	 * BR/EDR/LE type controllers. AMP controllers only need the
@@ -845,12 +851,16 @@ static int __hci_init(struct hci_dev *hdev)
 		return 0;
 
 	err = __hci_req_sync(hdev, hci_init3_req, 0, HCI_INIT_TIMEOUT, NULL);
-	if (err < 0)
+	if (err < 0) {
+		bt_dev_err(hdev, "CSR dbg: init3_req failed err=%d", err);
 		return err;
+	}
 
 	err = __hci_req_sync(hdev, hci_init4_req, 0, HCI_INIT_TIMEOUT, NULL);
-	if (err < 0)
+	if (err < 0) {
+		bt_dev_err(hdev, "CSR dbg: init4_req failed err=%d", err);
 		return err;
+	}
 
 	/* This function is only called when the controller is actually in
 	 * configured state. When the controller is marked as unconfigured,
@@ -4177,6 +4187,9 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 	unsigned long flags;
 
 	BT_DBG("opcode 0x%04x status 0x%02x", opcode, status);
+
+	if (status && test_bit(HCI_INIT, &hdev->flags))
+		bt_dev_err(hdev, "CSR dbg: opcode 0x%04x failed: 0x%02x", opcode, status);
 
 	/* If the completed command doesn't match the last one that was
 	 * sent we need to do special handling of it.

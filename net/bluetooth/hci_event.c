@@ -607,6 +607,19 @@ static void hci_cc_read_local_features(struct hci_dev *hdev,
 
 	memcpy(hdev->features, rp->features, 8);
 
+	/* Fake CSR dongles (detected in btusb_setup_csr) lie about
+	 * supporting BT4.0/LE via the LMP_LE feature bit, but they are
+	 * purely BR/EDR devices.  btusb_setup_csr() already cleared the
+	 * bit in hdev->features, but this memcpy just overwrote that work
+	 * with the raw dongle data.  Re-strip the LE and NO_BREDR bits now
+	 * so that le_setup() in hci_init2_req() is never called for these
+	 * controllers, preventing the EINVAL from their rejected LE cmds.
+	 */
+	if (test_bit(HCI_QUIRK_BROKEN_ERR_DATA_REPORTING, &hdev->quirks)) {
+		hdev->features[0][4] &= ~LMP_LE;
+		hdev->features[0][4] &= ~LMP_NO_BREDR;
+	}
+
 	/* Adjust default settings according to features
 	 * supported by device. */
 
