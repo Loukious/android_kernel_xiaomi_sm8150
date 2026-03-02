@@ -24,6 +24,9 @@ fi
 declare -A submodules
 submodules=(
     ["drivers/staging/rtw88"]="https://github.com/Loukious/rtw88.git master"
+	["drivers/net/can/usb-can-2-module"]="https://github.com/V0lk3n/usb-can-2-module main"
+	["drivers/net/can/can-isotp"]="https://github.com/Loukious/can-isotp master"
+	["drivers/net/can/elmcan"]="https://github.com/V0lk3n/elmcan master"
 )
 
 # Iterate through the submodules and clone them
