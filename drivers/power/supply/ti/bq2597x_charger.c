@@ -161,15 +161,7 @@ static int bq2597x_mode_data[] = {
 
 #define bq_dbg(fmt, ...)                                                       \
 	do {                                                                   \
-		if (bq->mode == BQ25970_ROLE_MASTER)                           \
-			printk(KERN_DEBUG "[bq2597x-MASTER]:%s:" fmt,          \
-			       __func__, ##__VA_ARGS__);                       \
-		else if (bq->mode == BQ25970_ROLE_SLAVE)                       \
-			printk(KERN_DEBUG "[bq2597x-SLAVE]:%s:" fmt, __func__, \
-			       ##__VA_ARGS__);                                 \
-		else                                                           \
-			printk(KERN_DEBUG "[bq2597x-STANDALONE]:%s:" fmt,      \
-			       __func__, ##__VA_ARGS__);                       \
+		no_printk(fmt, ##__VA_ARGS__);                                  \
 	} while (0);
 
 enum hvdcp3_type {
@@ -1338,7 +1330,7 @@ static int bq2597x_get_work_mode(struct bq2597x *bq, int *mode)
 	else
 		*mode = BQ25970_ROLE_STDALONE;
 
-	bq_info("work mode:%s\n",
+	bq_dbg("work mode:%s\n",
 		*mode == BQ25970_ROLE_STDALONE ?
 			"Standalone" :
 			(*mode == BQ25970_ROLE_SLAVE ? "Slave" : "Master"));
