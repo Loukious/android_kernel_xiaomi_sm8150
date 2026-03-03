@@ -7452,7 +7452,7 @@ static void smblib_check_vbat_work(struct work_struct *work)
 	if (strcmp(val.strval, "bq2597x-standalone") == 0) {
 		rc = power_supply_get_property(chg->cp_psy,
 				POWER_SUPPLY_PROP_TI_BATTERY_VOLTAGE, &val);
-		pr_err("getting ti battery voltage = %d\n", val.intval);
+		pr_debug("getting ti battery voltage = %d\n", val.intval);
 		if (rc < 0) {
 			pr_err("Error in getting ti battery voltage, rc=%d\n", rc);
 			return;
