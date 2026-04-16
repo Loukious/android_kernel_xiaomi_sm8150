@@ -10,6 +10,7 @@
 # Normal rules (sorted alphabetically)
 #
 .*
+!.github
 *.a
 *.bin
 *.bz2
