@@ -1,4 +1,3 @@
-# .github/workflows/sync-upstream.yml
 name: Sync with Upstream
 
 on:
@@ -11,6 +10,9 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: write        # ← this is what allows force-pushing
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -22,7 +24,7 @@ jobs:
             upstream_branch: 16.0
           - branch: nethunterdev
             upstream_branch: 16.0
-            patches_dir: nethunter   # patches folder name differs from branch name
+            patches_dir: nethunter
 
     steps:
       - name: Skip if not selected
@@ -34,7 +36,7 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
           fetch-depth: 0
-          token: ${{ secrets.PAT }}
+          # No PAT needed here anymore
 
       - name: Configure git
         run: |
