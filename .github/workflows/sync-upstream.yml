@@ -11,17 +11,19 @@ on:
         default: ''
 
 permissions:
-  contents: write        # ← this is what allows force-pushing
+  contents: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    name: sync (${{ matrix.branch }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - branch: 16.0dev
             upstream_branch: 16.0
+            patches_dir: 16.0
           - branch: nethunterdev
             upstream_branch: 16.0
             patches_dir: nethunter
@@ -36,7 +38,6 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
           fetch-depth: 0
-          # No PAT needed here anymore
 
       - name: Configure git
         run: |
@@ -45,15 +46,14 @@ jobs:
 
       - name: Fetch patches
         run: |
-          PATCHES_DIR="${{ matrix.patches_dir || matrix.branch }}"
           git fetch origin patches
           mkdir -p /tmp/patches
-          if git ls-tree origin/patches "patches/$PATCHES_DIR" > /dev/null 2>&1; then
-            git checkout origin/patches -- "patches/$PATCHES_DIR/"
-            cp "patches/$PATCHES_DIR/"*.patch /tmp/patches/
+          if git ls-tree origin/patches "patches/${{ matrix.patches_dir }}" > /dev/null 2>&1; then
+            git checkout origin/patches -- "patches/${{ matrix.patches_dir }}/"
+            cp "patches/${{ matrix.patches_dir }}/"*.patch /tmp/patches/
             git checkout -- .
           else
-            echo "No patches found for $PATCHES_DIR"
+            echo "No patches found for ${{ matrix.patches_dir }}"
           fi
 
       - name: Fetch upstream
