@@ -1,0 +1,82 @@
+# .github/workflows/sync-upstream.yml
+name: Sync with Upstream
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to sync (leave empty for all)'
+        required: false
+        default: ''
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: 16.0dev
+            upstream_branch: 16.0
+          - branch: nethunterdev
+            upstream_branch: 16.0
+            patches_dir: nethunter   # patches folder name differs from branch name
+
+    steps:
+      - name: Skip if not selected
+        if: ${{ github.event.inputs.branch != '' && github.event.inputs.branch != matrix.branch }}
+        run: exit 0
+
+      - name: Checkout kernel branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch patches
+        run: |
+          PATCHES_DIR="${{ matrix.patches_dir || matrix.branch }}"
+          git fetch origin patches
+          mkdir -p /tmp/patches
+          if git ls-tree origin/patches "patches/$PATCHES_DIR" > /dev/null 2>&1; then
+            git checkout origin/patches -- "patches/$PATCHES_DIR/"
+            cp "patches/$PATCHES_DIR/"*.patch /tmp/patches/
+            git checkout -- .
+          else
+            echo "No patches found for $PATCHES_DIR"
+          fi
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/crdroidandroid/android_kernel_xiaomi_sm8150.git
+          git fetch upstream ${{ matrix.upstream_branch }}
+
+      - name: Reset to upstream
+        run: git reset --hard upstream/${{ matrix.upstream_branch }}
+
+      - name: Apply patches
+        run: |
+          patches=$(ls /tmp/patches/*.patch 2>/dev/null | sort)
+          if [ -z "$patches" ]; then
+            echo "No patches to apply"
+          else
+            for patch in $patches; do
+              echo "Applying: $(basename $patch)"
+              git am "$patch" || {
+                echo "::error::Failed to apply $(basename $patch)"
+                git am --abort
+                exit 1
+              }
+            done
+          fi
+
+      - name: Force push
+        run: git push origin ${{ matrix.branch }} --force
