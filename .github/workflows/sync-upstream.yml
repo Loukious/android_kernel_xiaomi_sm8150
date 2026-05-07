@@ -22,10 +22,10 @@ jobs:
       matrix:
         include:
           - branch: 16.0dev
-            upstream_branch: 16.0
-            patches_dir: 16.0
+            upstream_branch: "16.0"
+            patches_dir: "16.0"
           - branch: nethunterdev
-            upstream_branch: 16.0
+            upstream_branch: "16.0"
             patches_dir: nethunter
 
     steps:
