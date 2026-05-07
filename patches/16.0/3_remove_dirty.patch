@@ -1,0 +1,32 @@
+From b7288bd5237c092d0d870cf7983589cf950b53cf Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Mon, 23 Jun 2025 01:45:46 +0100
+Subject: [PATCH] setlocalversion: remove '-dirty' suffix for uncommitted
+ changes in git and mercurial
+
+---
+ scripts/setlocalversion | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/setlocalversion b/scripts/setlocalversion
+index ef5665e389e1..b98078eff84a 100755
+--- a/scripts/setlocalversion
++++ b/scripts/setlocalversion
+@@ -94,7 +94,7 @@ scm_version()
+ 			git --no-optional-locks status -uno --porcelain 2>/dev/null ||
+ 			git diff-index --name-only HEAD
+ 		} | grep -qvE '^(.. )?scripts/package'; then
+-			printf '%s' -dirty
++			printf '%s' ''
+ 		fi
+ 
+ 		# All done with git
+@@ -118,7 +118,7 @@ scm_version()
+ 		# Are there uncommitted changes?
+ 		# These are represented by + after the changeset id.
+ 		case "$hgid" in
+-			*+|*+\ *) printf '%s' -dirty ;;
++			*+|*+\ *) printf '%s' '' ;;
+ 		esac
+ 
+ 		# All done with mercurial

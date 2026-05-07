@@ -1,0 +1,32 @@
+From 635362cdf63ee4819d6478b5e3f1ed6fe8c40db9 Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Thu, 16 Apr 2026 22:42:06 +0100
+Subject: [PATCH] Makefile: Add conditional check for KSU hook configurations
+
+---
+ drivers/kernelsu/Makefile | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/kernelsu/Makefile b/drivers/kernelsu/Makefile
+index b8b7ffecb2ac..f682916da5de 100644
+--- a/drivers/kernelsu/Makefile
++++ b/drivers/kernelsu/Makefile
+@@ -78,6 +78,9 @@ $(info -- KernelSU-Next Manager signature hash: $(KSU_NEXT_MANAGER_HASH))
+ ## Logic flipped for HAVE_KSU_HOOK: 0 is success, 1 is failure
+ HAVE_KSU_HOOK ?= 1
+ 
++# Only check hooks when we have config (skip during clean/mrproper when .config is absent)
++ifneq ($(CONFIG_KSU_MANUAL_HOOK)$(CONFIG_KSU_KPROBES_HOOK),)
++
+ # Checks hooks state
+ ifeq ($(CONFIG_KSU_KPROBES_HOOK), y)
+ $(info -- KernelSU-Next: Hook mode: Kprobes)
+@@ -97,6 +100,8 @@ ifneq ($(HAVE_KSU_HOOK),0)
+ $(error -- KernelSU-Next: No hooks were defined, please integrate manual hooks in your kernel!)
+ endif
+ 
++endif # hook config check
++
+ # some backports
+ ifneq ($(shell grep -Eq "^static int can_umount" $(srctree)/fs/namespace.c; echo $$?),0)
+ $(info -- KSU_NEXT: adding function 'static int can_umount(const struct path *path, int flags);' to $(srctree)/fs/namespace.c)

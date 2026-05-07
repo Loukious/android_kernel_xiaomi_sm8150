@@ -1,0 +1,19 @@
+From 4152c0447f61238720b3689125a84df98be80473 Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Mon, 2 Mar 2026 20:08:25 +0100
+Subject: [PATCH] funding: add funding configuration for Loukious
+
+---
+ .github/FUNDING.yml | 2 ++
+ 1 file changed, 2 insertions(+)
+ create mode 100644 .github/FUNDING.yml
+
+diff --git a/.github/FUNDING.yml b/.github/FUNDING.yml
+new file mode 100644
+index 000000000000..80640b0adc0a
+--- /dev/null
++++ b/.github/FUNDING.yml
+@@ -0,0 +1,2 @@
++github: Loukious
++buy_me_a_coffee: loukious
+\ No newline at end of file

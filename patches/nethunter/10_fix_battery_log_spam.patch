@@ -1,0 +1,95 @@
+From e8354df1b374a8b4d01fd88a9c956c8cef47c142 Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Tue, 3 Mar 2026 15:06:03 +0100
+Subject: [PATCH] debug: change log level from info to debug for battery status
+ and voltage
+
+---
+ drivers/power/supply/qcom/qpnp-fg-gen4.c   |  4 ++--
+ drivers/power/supply/qcom/smb5-lib.c       |  2 +-
+ drivers/power/supply/qcom/step-chg-jeita.c |  4 ++--
+ drivers/power/supply/ti/bq2597x_charger.c  | 12 ++----------
+ 4 files changed, 7 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/power/supply/qcom/qpnp-fg-gen4.c b/drivers/power/supply/qcom/qpnp-fg-gen4.c
+index 7ccc236b4010..53f50c710072 100644
+--- a/drivers/power/supply/qcom/qpnp-fg-gen4.c
++++ b/drivers/power/supply/qcom/qpnp-fg-gen4.c
+@@ -7241,7 +7241,7 @@ static void fg_battery_soc_smooth_tracking(struct fg_gen4_chip *chip)
+ 			power_supply_changed(fg->batt_psy);
+ 	}
+ 
+-	pr_info("soc:%d, last_soc:%d, raw_soc:%d, soc_changed:%d.\n",
++	pr_debug("soc:%d, last_soc:%d, raw_soc:%d, soc_changed:%d.\n",
+ 				fg->param.batt_soc, last_batt_soc,
+ 				fg->param.batt_raw_soc, soc_changed);
+ }
+@@ -7295,7 +7295,7 @@ static void soc_monitor_work(struct work_struct *work)
+ 	if (fg->soc_reporting_ready)
+ 		fg_battery_soc_smooth_tracking(chip);
+ 
+-	pr_info("soc:%d, raw_soc:%d, c:%d, s:%d\n",
++	pr_debug("soc:%d, raw_soc:%d, c:%d, s:%d\n",
+ 			fg->param.batt_soc, fg->param.batt_raw_soc,
+ 			fg->param.batt_ma, fg->charge_status);
+ 
+diff --git a/drivers/power/supply/qcom/smb5-lib.c b/drivers/power/supply/qcom/smb5-lib.c
+index c19e5ed26552..965295597438 100644
+--- a/drivers/power/supply/qcom/smb5-lib.c
++++ b/drivers/power/supply/qcom/smb5-lib.c
+@@ -7452,7 +7452,7 @@ static void smblib_check_vbat_work(struct work_struct *work)
+ 	if (strcmp(val.strval, "bq2597x-standalone") == 0) {
+ 		rc = power_supply_get_property(chg->cp_psy,
+ 				POWER_SUPPLY_PROP_TI_BATTERY_VOLTAGE, &val);
+-		pr_err("getting ti battery voltage = %d\n", val.intval);
++		pr_debug("getting ti battery voltage = %d\n", val.intval);
+ 		if (rc < 0) {
+ 			pr_err("Error in getting ti battery voltage, rc=%d\n", rc);
+ 			return;
+diff --git a/drivers/power/supply/qcom/step-chg-jeita.c b/drivers/power/supply/qcom/step-chg-jeita.c
+index dcf9b7b46ab6..7f473b35ce00 100644
+--- a/drivers/power/supply/qcom/step-chg-jeita.c
++++ b/drivers/power/supply/qcom/step-chg-jeita.c
+@@ -953,10 +953,10 @@ static int handle_jeita(struct step_chg_info *chip)
+ 		return rc;
+ 	}
+ 	batt_soc = pval.intval;
+-	pr_info("%s:batt_soc=%d\n", __func__, batt_soc);
++	pr_debug("%s:batt_soc=%d\n", __func__, batt_soc);
+ 	rc = power_supply_get_property(chip->bms_psy,
+ 			POWER_SUPPLY_PROP_FASTCHARGE_MODE, &pval);
+-	pr_err("%s:fastcharge_mode=%d\n", __func__, pval.intval);
++	pr_debug("%s:fastcharge_mode=%d\n", __func__, pval.intval);
+ 	if (rc < 0) {
+ 		pr_err("Couldn't read fastcharge mode fail rc=%d\n", rc);
+ 		return rc;
+diff --git a/drivers/power/supply/ti/bq2597x_charger.c b/drivers/power/supply/ti/bq2597x_charger.c
+index 304916983cab..e8e10f029d9b 100644
+--- a/drivers/power/supply/ti/bq2597x_charger.c
++++ b/drivers/power/supply/ti/bq2597x_charger.c
+@@ -161,15 +161,7 @@ static int bq2597x_mode_data[] = {
+ 
+ #define bq_dbg(fmt, ...)                                                       \
+ 	do {                                                                   \
+-		if (bq->mode == BQ25970_ROLE_MASTER)                           \
+-			printk(KERN_DEBUG "[bq2597x-MASTER]:%s:" fmt,          \
+-			       __func__, ##__VA_ARGS__);                       \
+-		else if (bq->mode == BQ25970_ROLE_SLAVE)                       \
+-			printk(KERN_DEBUG "[bq2597x-SLAVE]:%s:" fmt, __func__, \
+-			       ##__VA_ARGS__);                                 \
+-		else                                                           \
+-			printk(KERN_DEBUG "[bq2597x-STANDALONE]:%s:" fmt,      \
+-			       __func__, ##__VA_ARGS__);                       \
++		no_printk(fmt, ##__VA_ARGS__);                                  \
+ 	} while (0);
+ 
+ enum hvdcp3_type {
+@@ -1338,7 +1330,7 @@ static int bq2597x_get_work_mode(struct bq2597x *bq, int *mode)
+ 	else
+ 		*mode = BQ25970_ROLE_STDALONE;
+ 
+-	bq_info("work mode:%s\n",
++	bq_dbg("work mode:%s\n",
+ 		*mode == BQ25970_ROLE_STDALONE ?
+ 			"Standalone" :
+ 			(*mode == BQ25970_ROLE_SLAVE ? "Slave" : "Master"));
