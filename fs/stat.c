@@ -17,6 +17,10 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/compat.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#include <linux/version.h>
+#endif
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
@@ -30,6 +34,11 @@
  * found on the VFS inode structure.  This is the default if no getattr inode
  * operation is supplied.
  */
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_generic_fillattr_spoofer(struct inode *inode, struct kstat *stat, u32 result_mask);
+#endif
+
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 	stat->dev = inode->i_sb->s_dev;
@@ -75,10 +84,56 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	stat->result_mask |= STATX_BASIC_STATS;
 	request_mask &= STATX_ALL;
 	query_flags &= KSTAT_QUERY_FLAGS;
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/* - SUS_KSTAT is effective for any app-uid process (uid % 100000 >= 10000),
+	 *   independent of whether the process was umounted. We only tag result_mask
+	 *   here; the actual spoofing happens after ->getattr()/generic_fillattr().
+	 * - Note: on 4.14 struct kstat has no mnt_id member and there is no STATX_MNT_ID,
+	 *   so the mnt_id spoofing that upstream does here is a no-op and omitted.
+	 */
+	if (susfs_is_current_app_uid()) {
+		bool is_fuse = false;
+		if (susfs_is_inode_sus_kstat(inode, &is_fuse)) {
+			if (!is_fuse)
+				stat->result_mask |= STATX_SUS_KSTAT;
+			else
+				stat->result_mask |= STATX_SUS_KSTAT_FUSE;
+		}
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+
 	if (inode->i_op->getattr)
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	{
+		int err = inode->i_op->getattr(path, stat, request_mask,
+					    query_flags);
+		if (!err) {
+			if (stat->result_mask & STATX_SUS_KSTAT)
+				susfs_generic_fillattr_spoofer(inode, stat, STATX_SUS_KSTAT);
+			else if (stat->result_mask & STATX_SUS_KSTAT_FUSE)
+				susfs_generic_fillattr_spoofer(inode, stat, STATX_SUS_KSTAT_FUSE);
+		}
+		/* never let our internal request marks leak to userspace (stx_mask) */
+		stat->result_mask &= ~(STATX_SUS_KSTAT | STATX_SUS_KSTAT_FUSE);
+		return err;
+	}
+	if (stat->result_mask & STATX_SUS_KSTAT) {
+		generic_fillattr(inode, stat);
+		susfs_generic_fillattr_spoofer(inode, stat, STATX_SUS_KSTAT);
+		stat->result_mask &= ~(STATX_SUS_KSTAT | STATX_SUS_KSTAT_FUSE);
+		return 0;
+	}
+	if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
+		generic_fillattr(inode, stat);
+		susfs_generic_fillattr_spoofer(inode, stat, STATX_SUS_KSTAT_FUSE);
+		stat->result_mask &= ~(STATX_SUS_KSTAT | STATX_SUS_KSTAT_FUSE);
+		return 0;
+	}
+#else
 		return inode->i_op->getattr(path, stat, request_mask,
 					    query_flags);
-
+#endif
 	generic_fillattr(inode, stat);
 	return 0;
 }
@@ -147,6 +202,10 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
 	return error;
 }
 EXPORT_SYMBOL(vfs_statx_fd);
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
+#endif
+
 
 /**
  * vfs_statx - Get basic and extra attributes by filename
@@ -360,6 +419,10 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 	struct kstat stat;
 	int error;
 
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	ksu_handle_stat(&dfd, &filename, &flag);
+#endif
+
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
@@ -504,6 +567,10 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
 	struct kstat stat;
 	int error;
 
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	ksu_handle_stat(&dfd, &filename, &flag);
+#endif
+
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
@@ -643,6 +710,10 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 {
 	struct kstat stat;
 	int error;
+
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	ksu_handle_stat(&dfd, &filename, &flag);
+#endif
 
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
