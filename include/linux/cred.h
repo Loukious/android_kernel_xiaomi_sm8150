@@ -28,6 +28,7 @@ struct inode;
  */
 struct group_info {
 	atomic_t	usage;
+	u32 _padding; // Fix for https://github.com/bmax121/APatch/issues/400
 	int		ngroups;
 	kgid_t		gid[0];
 } __randomize_layout;
@@ -108,7 +109,7 @@ extern void groups_sort(struct group_info *);
  * same context as task->real_cred.
  */
 struct cred {
-	atomic_long_t	usage;
+	atomic_t	usage;
 #ifdef CONFIG_DEBUG_CREDENTIALS
 	atomic_t	subscribers;	/* number of processes subscribed */
 	void		*put_addr;
@@ -225,7 +226,7 @@ static inline bool cap_ambient_invariant_ok(const struct cred *cred)
  */
 static inline struct cred *get_new_cred(struct cred *cred)
 {
-	atomic_long_inc(&cred->usage);
+	atomic_inc(&cred->usage);
 	return cred;
 }
 
@@ -252,6 +253,17 @@ static inline const struct cred *get_cred(const struct cred *cred)
 	return get_new_cred(nonconst_cred);
 }
 
+static inline const struct cred *get_cred_rcu(const struct cred *cred)
+{
+	struct cred *nonconst_cred = (struct cred *) cred;
+	if (!cred)
+		return NULL;
+	if (!atomic_long_inc_not_zero(&nonconst_cred->usage))
+		return NULL;
+	validate_creds(cred);
+	return cred;
+}
+
 /**
  * put_cred - Release a reference to a set of credentials
  * @cred: The credentials to release
@@ -269,7 +281,7 @@ static inline void put_cred(const struct cred *_cred)
 
 	if (cred) {
 		validate_creds(cred);
-		if (atomic_long_dec_and_test(&(cred)->usage))
+		if (atomic_dec_and_test(&(cred)->usage))
 			__put_cred(cred);
 	}
 }
