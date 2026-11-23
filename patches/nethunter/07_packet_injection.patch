@@ -1,16 +1,8 @@
-From 76cfe4f560068ad7e1f86bfbb3908f17fd8d1a85 Mon Sep 17 00:00:00 2001
+From d1978f5e3d09fdfb93aff7a605aea19d8fd1876f Mon Sep 17 00:00:00 2001
 From: Loukious <24696530+Loukious@users.noreply.github.com>
-Date: Mon, 2 Mar 2026 13:45:10 +0100
+Date: Mon, 23 Nov 2026 16:13:02 +0100
 Subject: [PATCH] wifi: Add packet injection support for monitor mode
 
-- Frame injection/validation framework (hdd_frame_inject, hdd_frame_validate)
-- WMA injection queue and firmware TX completion handling
-- Monitor mode TX path via ndo_start_xmit
-- Sequence number and QoS header preservation for injected frames
-- Monitor mode session management and idempotent ifup/ifdown
-- Vendor command interface for injection control
-- Build configuration (CONFIG_FEATURE_FRAME_INJECTION_SUPPORT)
-- TX descriptor pool robustness improvements for monitor mode
 ---
  .../os_if/linux/qca_vendor.h                  |   34 +
  drivers/staging/qcacld-3.0/Kbuild             |   33 +-
@@ -28,7 +20,7 @@ Subject: [PATCH] wifi: Add packet injection support for monitor mode
  .../hdd/inc/wlan_hdd_frame_validate_test.h    |   51 +
  .../core/hdd/inc/wlan_hdd_inject_security.h   |  178 ++
  .../qcacld-3.0/core/hdd/inc/wlan_hdd_main.h   |    7 +
- .../core/hdd/src/wlan_hdd_cfg80211.c          |  294 ++-
+ .../core/hdd/src/wlan_hdd_cfg80211.c          |  291 ++-
  .../core/hdd/src/wlan_hdd_frame_inject.c      | 1824 ++++++++++++++
  ...wlan_hdd_frame_inject_comprehensive_test.c |  674 ++++++
  .../hdd/src/wlan_hdd_frame_inject_debug.c     |  757 ++++++
@@ -56,7 +48,7 @@ Subject: [PATCH] wifi: Add packet injection support for monitor mode
  .../qcacld-3.0/core/wma/src/wma_main.c        |   17 +
  .../qcacld-3.0/core/wma/src/wma_mgmt.c        |   40 +-
  .../qcacld-3.0/core/wma/src/wma_utils.c       |   14 +-
- 44 files changed, 11820 insertions(+), 69 deletions(-)
+ 44 files changed, 11818 insertions(+), 68 deletions(-)
  create mode 100644 drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject.h
  create mode 100644 drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_debug.h
  create mode 100644 drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_integration.h
@@ -78,7 +70,7 @@ Subject: [PATCH] wifi: Add packet injection support for monitor mode
  create mode 100644 drivers/staging/qcacld-3.0/core/wma/src/wma_frame_inject.c
 
 diff --git a/drivers/staging/qca-wifi-host-cmn/os_if/linux/qca_vendor.h b/drivers/staging/qca-wifi-host-cmn/os_if/linux/qca_vendor.h
-index 16d1466222d7..f49502e53c90 100644
+index 16d1466222d79afbf141cfaa803d487ab1ba0188..f49502e53c90cd9e36a359ef20ad4911ac47ea31 100644
 --- a/drivers/staging/qca-wifi-host-cmn/os_if/linux/qca_vendor.h
 +++ b/drivers/staging/qca-wifi-host-cmn/os_if/linux/qca_vendor.h
 @@ -4428,6 +4428,40 @@ enum qca_wlan_vendor_attr_config {
@@ -123,7 +115,7 @@ index 16d1466222d7..f49502e53c90 100644
  	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
  	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
 diff --git a/drivers/staging/qcacld-3.0/Kbuild b/drivers/staging/qcacld-3.0/Kbuild
-index 1351a6fd1016..c2e9998ff348 100644
+index a4106c5b7fc60d23e98a8613aa985a116e13ada9..f93cecbed9484879048584f0a09e66c9d9b75deb 100644
 --- a/drivers/staging/qcacld-3.0/Kbuild
 +++ b/drivers/staging/qcacld-3.0/Kbuild
 @@ -6,9 +6,6 @@ else
@@ -164,7 +156,7 @@ index 1351a6fd1016..c2e9998ff348 100644
  #######DIRECT_BUFFER_RX#########
  ifeq ($(CONFIG_DIRECT_BUF_RX_ENABLE), y)
  DBR_DIR = $(WLAN_COMMON_ROOT)/target_if/direct_buf_rx
-@@ -2392,6 +2403,12 @@ else
+@@ -2372,6 +2383,12 @@ else
  cppflags-y += -DDISABLE_MON_CONFIG
  endif
  
@@ -177,7 +169,7 @@ index 1351a6fd1016..c2e9998ff348 100644
  #Enable NL80211 test mode
  cppflags-$(CONFIG_NL80211_TESTMODE) += -DWLAN_NL80211_TESTMODE
  
-@@ -3329,6 +3346,16 @@ cppflags-$(CONFIG_DUMP_REO_QUEUE_INFO_IN_DDR) += -DDUMP_REO_QUEUE_INFO_IN_DDR
+@@ -3309,6 +3326,16 @@ cppflags-$(CONFIG_DUMP_REO_QUEUE_INFO_IN_DDR) += -DDUMP_REO_QUEUE_INFO_IN_DDR
  
  KBUILD_CPPFLAGS += $(cppflags-y)
  
@@ -195,7 +187,7 @@ index 1351a6fd1016..c2e9998ff348 100644
  
  ifeq ($(call cc-option-yn, -Wheader-guard), y)
 diff --git a/drivers/staging/qcacld-3.0/configs/default_defconfig b/drivers/staging/qcacld-3.0/configs/default_defconfig
-index aefbc655bee5..9374dc019d7e 100644
+index aefbc655bee5a7508a0a6fc9dab7634575716f04..9374dc019d7e799fa943b73692a7da51aae0c76d 100644
 --- a/drivers/staging/qcacld-3.0/configs/default_defconfig
 +++ b/drivers/staging/qcacld-3.0/configs/default_defconfig
 @@ -111,6 +111,7 @@ ifeq ($(CONFIG_ICNSS), y)
@@ -234,7 +226,7 @@ index aefbc655bee5..9374dc019d7e 100644
  ifeq ($(CONFIG_PCI_MSM), y)
  ifeq ($(CONFIG_HIF_PCI), y)
 diff --git a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx.c b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx.c
-index d6c7d24981cb..178d1a15d017 100644
+index d6c7d24981cb395b558d6fdc17e4567ff1cdf0f0..178d1a15d017d1828f4f70f3b85c2352aa62a40a 100644
 --- a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx.c
 +++ b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx.c
 @@ -181,11 +181,15 @@ ol_txrx_mgmt_send_ext(struct cdp_soc_t *soc_hdl, uint8_t vdev_id,
@@ -270,7 +262,7 @@ index d6c7d24981cb..178d1a15d017 100644
  	TXRX_STATS_MSDU_INCR(pdev, tx.mgmt, tx_mgmt_frm);
  	TXRX_ASSERT1(type < OL_TXRX_MGMT_NUM_TYPES);
 diff --git a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx_desc.c b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx_desc.c
-index f56d917c152a..8e4e33a04d40 100644
+index f56d917c152a69504cd979b38a787e321abfde2b..8e4e33a04d403fac480613440bf86b658358759a 100644
 --- a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx_desc.c
 +++ b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_tx_desc.c
 @@ -344,10 +344,31 @@ ol_tx_desc_alloc_wrapper(struct ol_txrx_pdev_t *pdev,
@@ -310,7 +302,7 @@ index f56d917c152a..8e4e33a04d40 100644
  #else
  struct ol_tx_desc_t *
 diff --git a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx.c b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx.c
-index 8466148dcaa8..5f8088ee87d3 100644
+index 8466148dcaa82bd7b0d4d5a2cab6dc396f11beff..5f8088ee87d303d4d81c98bfab1e568cbd8da857 100644
 --- a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx.c
 +++ b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx.c
 @@ -878,6 +878,12 @@ ol_txrx_pdev_attach(ol_txrx_soc_handle soc,
@@ -327,7 +319,7 @@ index 8466148dcaa8..5f8088ee87d3 100644
  	/* init LL/HL cfg here */
  	pdev->cfg.is_high_latency = ol_cfg_is_high_latency(cfg_pdev);
 diff --git a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx_flow_control.c b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx_flow_control.c
-index bec7b1fd6b0e..d6e1013587ec 100644
+index bec7b1fd6b0e4377a1818d96460e43f60797f052..d6e1013587ec704a371ab890a285f19f896a4808 100644
 --- a/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx_flow_control.c
 +++ b/drivers/staging/qcacld-3.0/core/dp/txrx/ol_txrx_flow_control.c
 @@ -55,6 +55,9 @@
@@ -391,7 +383,7 @@ index bec7b1fd6b0e..d6e1013587ec 100644
  
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject.h
 new file mode 100644
-index 000000000000..8b4791e5066a
+index 0000000000000000000000000000000000000000..8b4791e5066aa83974bfa00f849430c19af62bfc
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject.h
 @@ -0,0 +1,717 @@
@@ -1115,7 +1107,7 @@ index 000000000000..8b4791e5066a
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_debug.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_debug.h
 new file mode 100644
-index 000000000000..cc473ec59739
+index 0000000000000000000000000000000000000000..cc473ec5973966a5f0a2f57b434159dcf38daa75
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_debug.h
 @@ -0,0 +1,174 @@
@@ -1296,7 +1288,7 @@ index 000000000000..cc473ec59739
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_integration.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_integration.h
 new file mode 100644
-index 000000000000..6612c5d008c4
+index 0000000000000000000000000000000000000000..6612c5d008c4a68b0a668d3b57c333f2a16a8efb
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_integration.h
 @@ -0,0 +1,122 @@
@@ -1425,7 +1417,7 @@ index 000000000000..6612c5d008c4
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_security_test.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_security_test.h
 new file mode 100644
-index 000000000000..66148b547b4d
+index 0000000000000000000000000000000000000000..66148b547b4d7a22adfe542780abcbe100d6072b
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_security_test.h
 @@ -0,0 +1,104 @@
@@ -1536,7 +1528,7 @@ index 000000000000..66148b547b4d
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_test.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_test.h
 new file mode 100644
-index 000000000000..42811c027765
+index 0000000000000000000000000000000000000000..42811c02776595738dc855b7aafbc6ea70e8fe91
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_inject_test.h
 @@ -0,0 +1,96 @@
@@ -1639,7 +1631,7 @@ index 000000000000..42811c027765
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_validate.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_validate.h
 new file mode 100644
-index 000000000000..fc76dad2fa41
+index 0000000000000000000000000000000000000000..fc76dad2fa4191f94b05e18e7d8035a4d69f5643
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_validate.h
 @@ -0,0 +1,89 @@
@@ -1735,7 +1727,7 @@ index 000000000000..fc76dad2fa41
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_validate_test.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_validate_test.h
 new file mode 100644
-index 000000000000..edc3ddc196cf
+index 0000000000000000000000000000000000000000..edc3ddc196cff005a0a44c6845534c442a26e535
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_frame_validate_test.h
 @@ -0,0 +1,51 @@
@@ -1793,7 +1785,7 @@ index 000000000000..edc3ddc196cf
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_inject_security.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_inject_security.h
 new file mode 100644
-index 000000000000..635bfa314e00
+index 0000000000000000000000000000000000000000..635bfa314e00242ddf689b64f1ac5f69d2cce706
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_inject_security.h
 @@ -0,0 +1,178 @@
@@ -1977,7 +1969,7 @@ index 000000000000..635bfa314e00
 +#endif /* __WLAN_HDD_INJECT_SECURITY_H */
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_main.h b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_main.h
-index bda8772593a9..265acbe1d9d9 100644
+index bda8772593a972c371630866134b6ca417e2e359..265acbe1d9d9fce523bee567b41ed311fc95474d 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_main.h
 +++ b/drivers/staging/qcacld-3.0/core/hdd/inc/wlan_hdd_main.h
 @@ -97,6 +97,9 @@
@@ -2002,7 +1994,7 @@ index bda8772593a9..265acbe1d9d9 100644
  
  #define WLAN_HDD_GET_STATION_CTX_PTR(adapter) (&(adapter)->session.station)
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_cfg80211.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_cfg80211.c
-index 759953562b33..63b43002408c 100644
+index 94d24ddb25ef388896a49dc859ac6dcde26c39ba..63b43002408c377da34ff919e41814b236f7307a 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_cfg80211.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_cfg80211.c
 @@ -29,6 +29,8 @@
@@ -2024,7 +2016,7 @@ index 759953562b33..63b43002408c 100644
  #include <qdf_hang_event_notifier.h>
  #include "hif.h"
  #include "wlan_hdd_ioctl.h"
-@@ -6736,6 +6741,26 @@ int wlan_hdd_send_roam_auth_event(struct hdd_adapter *adapter, uint8_t *bssid,
+@@ -6736,6 +6741,26 @@ nla_put_failure:
  	 (((data_snr_weight) & 0xff) << 8) | \
  	 ((ack_snr_weight) & 0xff))
  
@@ -2270,17 +2262,7 @@ index 759953562b33..63b43002408c 100644
  		if (QDF_IS_STATUS_ERROR(qdf_status))
  			status = qdf_status_to_os_return(qdf_status);
  
-@@ -20476,7 +20663,8 @@ static int __wlan_hdd_cfg80211_join_ibss(struct wiphy *wiphy,
- 						 params->ssid_len,
- 						 bssid.bytes, NULL,
- 						 conn_info_channel,
--						 params->chandef.width);
-+						 params->chandef.width,
-+						 0);
- 
- 	if (0 > status) {
- 		hdd_err("connect failed");
-@@ -21101,7 +21289,7 @@ static inline void hdd_dump_connect_req(struct hdd_adapter *adapter,
+@@ -21102,7 +21289,7 @@ static inline void hdd_dump_connect_req(struct hdd_adapter *adapter,
  {
  	uint32_t i;
  
@@ -2289,7 +2271,7 @@ index 759953562b33..63b43002408c 100644
  		       ndev->name, adapter->vdev_id, adapter->device_mode,
  		       req->channel ? req->channel->center_freq : 0,
  		       (int)req->ssid_len, req->ssid, req->auth_type,
-@@ -21110,20 +21298,20 @@ static inline void hdd_dump_connect_req(struct hdd_adapter *adapter,
+@@ -21111,20 +21298,20 @@ static inline void hdd_dump_connect_req(struct hdd_adapter *adapter,
  		       req->crypto.cipher_group, req->mfp,
  		       req->channel_hint ? req->channel_hint->center_freq : 0);
  	if (req->bssid)
@@ -2315,7 +2297,7 @@ index 759953562b33..63b43002408c 100644
  			       req->crypto.ciphers_pairwise[i]);
  }
  
-@@ -21154,16 +21342,26 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
+@@ -21155,16 +21342,26 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
  	uint8_t vdev_id_list[MAX_NUMBER_OF_CONC_CONNECTIONS], i;
  	bool disable_nan = true;
  	uint32_t ch_freq_hint = 0;
@@ -2343,7 +2325,7 @@ index 759953562b33..63b43002408c 100644
  
  	qdf_mtrace(QDF_MODULE_ID_HDD, QDF_MODULE_ID_HDD,
  		   TRACE_CODE_HDD_CFG80211_CONNECT,
-@@ -21184,8 +21382,11 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
+@@ -21185,8 +21382,11 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
  	}
  
  	status = wlan_hdd_validate_context(hdd_ctx);
@@ -2356,7 +2338,7 @@ index 759953562b33..63b43002408c 100644
  
  	if (req->bssid)
  		bssid = req->bssid;
-@@ -21269,7 +21470,7 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
+@@ -21270,7 +21470,7 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
  	/*initialise security parameters */
  	status = wlan_hdd_cfg80211_set_privacy(adapter, req);
  	if (status < 0) {
@@ -2365,7 +2347,7 @@ index 759953562b33..63b43002408c 100644
  		return status;
  	}
  
-@@ -23818,6 +24019,71 @@ int wlan_hdd_change_hw_mode_for_given_chnl(struct hdd_adapter *adapter,
+@@ -23819,6 +24019,71 @@ int wlan_hdd_change_hw_mode_for_given_chnl(struct hdd_adapter *adapter,
  }
  
  #ifdef FEATURE_MONITOR_MODE_SUPPORT
@@ -2437,7 +2419,7 @@ index 759953562b33..63b43002408c 100644
  /**
   * wlan_hdd_cfg80211_set_mon_ch() - Set monitor mode capture channel
   * @wiphy: Handle to struct wiphy to get handle to module context.
-@@ -23959,6 +24225,9 @@ static int __wlan_hdd_cfg80211_set_mon_ch(struct wiphy *wiphy,
+@@ -23960,6 +24225,9 @@ static int __wlan_hdd_cfg80211_set_mon_ch(struct wiphy *wiphy,
  		return qdf_status_to_os_return(status);
  	}
  
@@ -2447,7 +2429,7 @@ index 759953562b33..63b43002408c 100644
  	hdd_exit();
  
  	return 0;
-@@ -24770,6 +25039,7 @@ static struct cfg80211_ops wlan_hdd_cfg80211_ops = {
+@@ -24771,6 +25039,7 @@ static struct cfg80211_ops wlan_hdd_cfg80211_ops = {
  #endif
  #ifdef FEATURE_MONITOR_MODE_SUPPORT
  	.set_monitor_channel = wlan_hdd_cfg80211_set_mon_ch,
@@ -2457,7 +2439,7 @@ index 759953562b33..63b43002408c 100644
  	defined(CFG80211_ABORT_SCAN)
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject.c
 new file mode 100644
-index 000000000000..84fbc7e67414
+index 0000000000000000000000000000000000000000..84fbc7e674146d6e893a105f7147e0d1bc0dfd6b
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject.c
 @@ -0,0 +1,1824 @@
@@ -4287,7 +4269,7 @@ index 000000000000..84fbc7e67414
 +#endif /* FEATURE_FRAME_INJECTION_SUPPORT */
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_comprehensive_test.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_comprehensive_test.c
 new file mode 100644
-index 000000000000..c06a45c0ac34
+index 0000000000000000000000000000000000000000..c06a45c0ac34e4c620a56876083ccfb15b4fceb0
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_comprehensive_test.c
 @@ -0,0 +1,674 @@
@@ -4968,7 +4950,7 @@ index 000000000000..c06a45c0ac34
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_debug.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_debug.c
 new file mode 100644
-index 000000000000..e563eb24f439
+index 0000000000000000000000000000000000000000..e563eb24f439a7cfc20170ca199f24c7ec451929
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_debug.c
 @@ -0,0 +1,757 @@
@@ -5732,7 +5714,7 @@ index 000000000000..e563eb24f439
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_integration.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_integration.c
 new file mode 100644
-index 000000000000..3af2706a6943
+index 0000000000000000000000000000000000000000..3af2706a6943d6ebcf6ffa91aced55b39ecb66ea
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_integration.c
 @@ -0,0 +1,528 @@
@@ -6267,7 +6249,7 @@ index 000000000000..3af2706a6943
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_security_test.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_security_test.c
 new file mode 100644
-index 000000000000..c5c52b20bac6
+index 0000000000000000000000000000000000000000..c5c52b20bac6ad5d90b5a42a8569f67a652d757b
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_security_test.c
 @@ -0,0 +1,714 @@
@@ -6988,7 +6970,7 @@ index 000000000000..c5c52b20bac6
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_test.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_test.c
 new file mode 100644
-index 000000000000..4ae0ab1d835d
+index 0000000000000000000000000000000000000000..4ae0ab1d835db833f1603480afdb52a21d466bfa
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_inject_test.c
 @@ -0,0 +1,567 @@
@@ -7562,7 +7544,7 @@ index 000000000000..4ae0ab1d835d
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_validate.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_validate.c
 new file mode 100644
-index 000000000000..810a8a243acf
+index 0000000000000000000000000000000000000000..810a8a243acf8decd0dd13c04e1e0b94c1cdb4b9
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_validate.c
 @@ -0,0 +1,686 @@
@@ -8254,7 +8236,7 @@ index 000000000000..810a8a243acf
 +#endif /* FEATURE_FRAME_INJECTION_SUPPORT */
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_validate_test.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_validate_test.c
 new file mode 100644
-index 000000000000..91cd2030fa00
+index 0000000000000000000000000000000000000000..91cd2030fa00bc15e0a1f5b8a4f693c1cf8a92ca
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_frame_validate_test.c
 @@ -0,0 +1,492 @@
@@ -8752,7 +8734,7 @@ index 000000000000..91cd2030fa00
 +#endif /* FEATURE_FRAME_INJECTION_SUPPORT */
 \ No newline at end of file
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_hostapd.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_hostapd.c
-index bea7dcf0d8aa..b9765eda78fd 100644
+index bea7dcf0d8aa53dc5655a007bca9d4dbe7fc4211..b9765eda78fd142d181b57a7bc2d461394a4d091 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_hostapd.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_hostapd.c
 @@ -6718,7 +6718,8 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
@@ -8767,7 +8749,7 @@ index bea7dcf0d8aa..b9765eda78fd 100644
  		/*
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_inject_security.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_inject_security.c
 new file mode 100644
-index 000000000000..4971efcce7ac
+index 0000000000000000000000000000000000000000..4971efcce7ac50ef9896ab3db47601127e44d6e6
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_inject_security.c
 @@ -0,0 +1,465 @@
@@ -9237,7 +9219,7 @@ index 000000000000..4971efcce7ac
 +
 +#endif /* FEATURE_FRAME_INJECTION_SUPPORT */
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_ioctl.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_ioctl.c
-index 41b306fd07e3..be01cab2a0a6 100644
+index 41b306fd07e3c28320213adeeb76b03777ad313c..be01cab2a0a6cf41a3dd4234944216c3fe73ded0 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_ioctl.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_ioctl.c
 @@ -26,6 +26,9 @@
@@ -9307,7 +9289,7 @@ index 41b306fd07e3..be01cab2a0a6 100644
  }
 -
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_main.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_main.c
-index 627ea453d326..19f656eb9907 100644
+index 627ea453d3261d8aa2d70db59319c9ba6b8f5c0f..19f656eb99077b231a123c6d7a6dc9d9823990e1 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_main.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_main.c
 @@ -34,6 +34,8 @@
@@ -9651,7 +9633,7 @@ index 627ea453d326..19f656eb9907 100644
  module_param_cb(timer_multiplier, &timer_multiplier_ops, NULL, 0644);
 -
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.c
-index 082134e59cda..5dfd51da40b5 100644
+index 082134e59cdad8f86196bf5898263770e6321861..5dfd51da40b5607d26ca0c40c7d8c290d6c560fb 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.c
 @@ -25,6 +25,9 @@
@@ -9734,7 +9716,7 @@ index 082134e59cda..5dfd51da40b5 100644
 +	return ret;
  }
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.h b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.h
-index 49a8cb07b8c2..84d46b38f37d 100644
+index 49a8cb07b8c2afb9f0e3e2dacf16d7dd7e446fb6..84d46b38f37d8aaa15e3af6666ce25d6fc703f75 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.h
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_rx_monitor.h
 @@ -31,6 +31,7 @@ void hdd_rx_monitor_callback(ol_osif_vdev_handle vdev,
@@ -9757,7 +9739,7 @@ index 49a8cb07b8c2..84d46b38f37d 100644
  
  #endif /* __WLAN_HDD_RX_MONITOR_H */
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_tx_rx.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_tx_rx.c
-index b73aec06bdc8..132129615569 100644
+index b73aec06bdc85e5a1434aa7dfdc35cd0cc2023f5..132129615569590995048b94b2de5f350e2926a6 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_tx_rx.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_tx_rx.c
 @@ -59,6 +59,9 @@
@@ -10012,7 +9994,7 @@ index b73aec06bdc8..132129615569 100644
  	}
  
 diff --git a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_wext.c b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_wext.c
-index 62b25d8a3556..294116ac9cd9 100644
+index 62b25d8a3556f69e1c1536c50cb6b1b946ce7f7b..294116ac9cd9b18f7d1223b955f579d3ece76706 100644
 --- a/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_wext.c
 +++ b/drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_wext.c
 @@ -11018,12 +11018,62 @@ static const struct iw_priv_args we_private_args[] = {
@@ -10081,7 +10063,7 @@ index 62b25d8a3556..294116ac9cd9 100644
  	.private_args = we_private_args,
  	.get_wireless_stats = NULL,
 diff --git a/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_action_frame.c b/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_action_frame.c
-index 60abe3eed6c4..dbe9486403e7 100644
+index 60abe3eed6c404cc6c7be550f5badce9dda251db..dbe9486403e73299dd54c9ed338887457968ce7e 100644
 --- a/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_action_frame.c
 +++ b/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_action_frame.c
 @@ -55,6 +55,10 @@
@@ -10170,7 +10152,7 @@ index 60abe3eed6c4..dbe9486403e7 100644
  		}
  		break;
 diff --git a/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_sme_req_messages.c b/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_sme_req_messages.c
-index d10581d1779c..1d4dab7bc180 100644
+index d10581d1779c507bc7a3de391fb2cec980408a25..1d4dab7bc18049ff769d3ef16057da66c0f1e0b4 100644
 --- a/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_sme_req_messages.c
 +++ b/drivers/staging/qcacld-3.0/core/mac/src/pe/lim/lim_process_sme_req_messages.c
 @@ -4956,6 +4956,14 @@ static void lim_process_sme_channel_change_request(struct mac_context *mac_ctx,
@@ -10189,7 +10171,7 @@ index d10581d1779c..1d4dab7bc180 100644
  	}
  
 diff --git a/drivers/staging/qcacld-3.0/core/sme/src/common/sme_api.c b/drivers/staging/qcacld-3.0/core/sme/src/common/sme_api.c
-index fb5e97231b9c..cf786d4b11f4 100644
+index fb5e97231b9c52d176c8e93a7cb5ff63fe08052b..cf786d4b11f4f464797d74662c5bc80af4ca3c7a 100644
 --- a/drivers/staging/qcacld-3.0/core/sme/src/common/sme_api.c
 +++ b/drivers/staging/qcacld-3.0/core/sme/src/common/sme_api.c
 @@ -4027,6 +4027,8 @@ static uint8_t sme_get_nss_chain_shift(enum QDF_OPMODE device_mode)
@@ -10202,7 +10184,7 @@ index fb5e97231b9c..cf786d4b11f4 100644
  		return SAP_NSS_CHAINS_SHIFT;
  	case QDF_P2P_GO_MODE:
 diff --git a/drivers/staging/qcacld-3.0/core/sme/src/csr/csr_api_roam.c b/drivers/staging/qcacld-3.0/core/sme/src/csr/csr_api_roam.c
-index 4432fb9d9e99..6a028c48b8ad 100644
+index 4432fb9d9e996c400c105f52cf593a3a538f459b..6a028c48b8ad76ea4232eef5972fe17a67aa1a41 100644
 --- a/drivers/staging/qcacld-3.0/core/sme/src/csr/csr_api_roam.c
 +++ b/drivers/staging/qcacld-3.0/core/sme/src/csr/csr_api_roam.c
 @@ -17488,6 +17488,10 @@ void csr_get_vdev_type_nss(enum QDF_OPMODE dev_mode, uint8_t *nss_2g,
@@ -10218,7 +10200,7 @@ index 4432fb9d9e99..6a028c48b8ad 100644
  		*nss_5g = mac_ctx->vdev_type_nss_5g.sap;
 diff --git a/drivers/staging/qcacld-3.0/core/wma/inc/wma_frame_inject.h b/drivers/staging/qcacld-3.0/core/wma/inc/wma_frame_inject.h
 new file mode 100644
-index 000000000000..892ea049a136
+index 0000000000000000000000000000000000000000..892ea049a136b98ad3f7645b9ae660ebe32f964a
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/wma/inc/wma_frame_inject.h
 @@ -0,0 +1,398 @@
@@ -10621,7 +10603,7 @@ index 000000000000..892ea049a136
 +
 +#endif /* __WMA_FRAME_INJECT_H */
 diff --git a/drivers/staging/qcacld-3.0/core/wma/src/wma_data.c b/drivers/staging/qcacld-3.0/core/wma/src/wma_data.c
-index 21e94a15af4b..095f73b5d688 100644
+index 21e94a15af4ba3b70761172d567e6cf5737fdd37..095f73b5d688dddada229c68aba4190848bd1341 100644
 --- a/drivers/staging/qcacld-3.0/core/wma/src/wma_data.c
 +++ b/drivers/staging/qcacld-3.0/core/wma/src/wma_data.c
 @@ -59,6 +59,7 @@
@@ -10665,7 +10647,7 @@ index 21e94a15af4b..095f73b5d688 100644
  		WMA_LOGE("Tx Complete Cb not registered by umac");
  		return;
 diff --git a/drivers/staging/qcacld-3.0/core/wma/src/wma_dev_if.c b/drivers/staging/qcacld-3.0/core/wma/src/wma_dev_if.c
-index 0e9a8cfd8c93..761963580876 100644
+index 0e9a8cfd8c9332cd96952f3e63f90255dcb5a316..761963580876c71c1eae95b13bb0c60420cb95d4 100644
 --- a/drivers/staging/qcacld-3.0/core/wma/src/wma_dev_if.c
 +++ b/drivers/staging/qcacld-3.0/core/wma/src/wma_dev_if.c
 @@ -550,11 +550,17 @@ static void wma_handle_monitor_mode_vdev_detach(tp_wma_handle wma,
@@ -10691,7 +10673,7 @@ index 0e9a8cfd8c93..761963580876 100644
  
 diff --git a/drivers/staging/qcacld-3.0/core/wma/src/wma_frame_inject.c b/drivers/staging/qcacld-3.0/core/wma/src/wma_frame_inject.c
 new file mode 100644
-index 000000000000..0f32770e96e6
+index 0000000000000000000000000000000000000000..0f32770e96e632ef3ea85f71ab77e22bfcc30321
 --- /dev/null
 +++ b/drivers/staging/qcacld-3.0/core/wma/src/wma_frame_inject.c
 @@ -0,0 +1,2118 @@
@@ -12814,7 +12796,7 @@ index 000000000000..0f32770e96e6
 +
 +#endif /* FEATURE_FRAME_INJECTION_SUPPORT */
 diff --git a/drivers/staging/qcacld-3.0/core/wma/src/wma_main.c b/drivers/staging/qcacld-3.0/core/wma/src/wma_main.c
-index db1ee1bfa8a8..aa2829e82d6a 100644
+index db1ee1bfa8a889249efbf02f5528eec1f9edf8ab..aa2829e82d6a69d480103640de3bb55c60d4cdae 100644
 --- a/drivers/staging/qcacld-3.0/core/wma/src/wma_main.c
 +++ b/drivers/staging/qcacld-3.0/core/wma/src/wma_main.c
 @@ -98,6 +98,7 @@
@@ -12856,7 +12838,7 @@ index db1ee1bfa8a8..aa2829e82d6a 100644
  	init_deinit_free_num_units(wma_handle->psoc, tgt_psoc_info);
  	target_if_free_psoc_tgt_info(wma_handle->psoc);
 diff --git a/drivers/staging/qcacld-3.0/core/wma/src/wma_mgmt.c b/drivers/staging/qcacld-3.0/core/wma/src/wma_mgmt.c
-index ab23421d5b60..2ca7d8eb5385 100644
+index ab23421d5b608332ecdaf56d65c1afe79b92e90a..2ca7d8eb53854249bf74fc4b253f18d7b7ea7910 100644
 --- a/drivers/staging/qcacld-3.0/core/wma/src/wma_mgmt.c
 +++ b/drivers/staging/qcacld-3.0/core/wma/src/wma_mgmt.c
 @@ -71,6 +71,7 @@
@@ -12922,7 +12904,7 @@ index ab23421d5b60..2ca7d8eb5385 100644
  #if !defined(REMOVE_PKT_LOG)
  	vdev_id = mgmt_txrx_get_vdev_id(pdev, desc_id);
 diff --git a/drivers/staging/qcacld-3.0/core/wma/src/wma_utils.c b/drivers/staging/qcacld-3.0/core/wma/src/wma_utils.c
-index 67ed97826361..e2f0a8ddd4d4 100644
+index 67ed978263619811945a0f6b45e46805e13c8a45..e2f0a8ddd4d436015177c9887d96c68611b9e4da 100644
 --- a/drivers/staging/qcacld-3.0/core/wma/src/wma_utils.c
 +++ b/drivers/staging/qcacld-3.0/core/wma/src/wma_utils.c
 @@ -4690,6 +4690,7 @@ QDF_STATUS wma_mon_mlme_vdev_down_send(struct vdev_mlme_obj *vdev_mlme,
@@ -12953,3 +12935,6 @@ index 67ed97826361..e2f0a8ddd4d4 100644
  
  	return status;
  }
+-- 
+2.53.0
+

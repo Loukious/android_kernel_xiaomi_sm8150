@@ -1,0 +1,301 @@
+From ccedc1fedfa8b23c29bfec868be185aaf68f4f39 Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 16:15:57 +0100
+Subject: [PATCH] media: rc: ir-spi: support Xiaomi legacy IR HAL alongside
+ LIRC
+
+Expose /dev/ir_spi for HALs using premodulated byte streams while retaining
+/dev/lirc0 for standard LIRC HALs. Match both existing device-tree bindings.
+Serialize transfers and retain state safely across device removal.
+
+Legacy wire format follows the working AnymoreProject and Infinity-X
+maintainer drivers: 1.92 MHz, 32-bit SPI words, SEND_MODE byte length.
+---
+ drivers/media/rc/ir-spi.c | 210 +++++++++++++++++++++++++++++++++++---
+ 1 file changed, 196 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/media/rc/ir-spi.c b/drivers/media/rc/ir-spi.c
+index 9714b9c55b7d54bb0a6b3b80779e30458c8ed700..a4ab01c5022eaa610a3f64c7573e36d6fa1d6784 100644
+--- a/drivers/media/rc/ir-spi.c
++++ b/drivers/media/rc/ir-spi.c
+@@ -6,6 +6,10 @@
+ 
+ #include <linux/delay.h>
+ #include <linux/fs.h>
++#include <linux/kref.h>
++#include <linux/miscdevice.h>
++#include <linux/uaccess.h>
++#include <uapi/linux/lirc.h>
+ #include <linux/module.h>
+ #include <linux/mutex.h>
+ #include <linux/of_gpio.h>
+@@ -18,6 +22,10 @@
+ #define IR_SPI_DEFAULT_FREQUENCY	38000
+ #define IR_SPI_MAX_BUFSIZE		32768
+ 
++/* Xiaomi HAL sends an already modulated bitstream at 1.92 MHz. */
++#define IR_SPI_LEGACY_FREQUENCY		1920000
++#define IR_SPI_LEGACY_MAX_BUFSIZE	524288
++
+ struct ir_spi_data {
+ 	u32 freq;
+ 	bool negated;
+@@ -29,6 +37,152 @@ struct ir_spi_data {
+ 	struct rc_dev *rc;
+ 	struct spi_device *spi;
+ 	struct regulator *regulator;
++	struct miscdevice legacy;
++	struct mutex lock;
++	struct kref ref;
++};
++
++struct ir_spi_legacy_file {
++	struct ir_spi_data *idata;
++	u32 length;
++};
++
++static void ir_spi_free(struct kref *ref)
++{
++	struct ir_spi_data *idata = container_of(ref, struct ir_spi_data, ref);
++
++	kfree(idata);
++}
++
++static void ir_spi_release_data(void *data)
++{
++	struct ir_spi_data *idata = data;
++
++	kref_put(&idata->ref, ir_spi_free);
++}
++
++/* Both interfaces serialize transfers, including device removal. */
++static int ir_spi_transfer(struct ir_spi_data *idata,
++			   struct spi_transfer *xfer)
++{
++	int ret;
++
++	if (!idata->spi)
++		return -ENODEV;
++
++	ret = regulator_enable(idata->regulator);
++	if (ret)
++		return ret;
++
++	ret = spi_sync_transfer(idata->spi, xfer, 1);
++	if (ret)
++		dev_err(&idata->spi->dev, "unable to deliver the signal\n");
++
++	regulator_disable(idata->regulator);
++	return ret;
++}
++
++static int ir_spi_legacy_open(struct inode *inode, struct file *file)
++{
++	struct miscdevice *misc = file->private_data;
++	struct ir_spi_data *idata = container_of(misc, struct ir_spi_data, legacy);
++	struct ir_spi_legacy_file *ctx;
++	int ret = 0;
++
++	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
++	if (!ctx)
++		return -ENOMEM;
++
++	mutex_lock(&idata->lock);
++	if (!idata->spi) {
++		ret = -ENODEV;
++	} else {
++		kref_get(&idata->ref);
++		ctx->idata = idata;
++		file->private_data = ctx;
++	}
++	mutex_unlock(&idata->lock);
++
++	if (ret)
++		kfree(ctx);
++	return ret;
++}
++
++static int ir_spi_legacy_close(struct inode *inode, struct file *file)
++{
++	struct ir_spi_legacy_file *ctx = file->private_data;
++
++	kref_put(&ctx->idata->ref, ir_spi_free);
++	kfree(ctx);
++	return 0;
++}
++
++static long ir_spi_legacy_ioctl(struct file *file, unsigned int cmd,
++			       unsigned long arg)
++{
++	struct ir_spi_legacy_file *ctx = file->private_data;
++	u32 length;
++	int ret = 0;
++
++	/* The Xiaomi ABI uses SEND_MODE as a byte-buffer length. */
++	if (cmd != LIRC_SET_SEND_MODE)
++		return -EINVAL;
++	if (get_user(length, (u32 __user *)arg))
++		return -EFAULT;
++	if (length > IR_SPI_LEGACY_MAX_BUFSIZE || length % sizeof(u32))
++		return -EINVAL;
++
++	mutex_lock(&ctx->idata->lock);
++	if (!ctx->idata->spi)
++		ret = -ENODEV;
++	else
++		ctx->length = length;
++	mutex_unlock(&ctx->idata->lock);
++	return ret;
++}
++
++static ssize_t ir_spi_legacy_write(struct file *file, const char __user *buf,
++				  size_t length, loff_t *offset)
++{
++	struct ir_spi_legacy_file *ctx = file->private_data;
++	struct spi_transfer xfer = {
++		.speed_hz = IR_SPI_LEGACY_FREQUENCY,
++		.bits_per_word = 32,
++		.len = length,
++	};
++	void *data;
++	int ret;
++
++	if (!length || length > IR_SPI_LEGACY_MAX_BUFSIZE ||
++	    length % sizeof(u32))
++		return -EINVAL;
++
++	data = memdup_user(buf, length);
++	if (IS_ERR(data))
++		return PTR_ERR(data);
++	xfer.tx_buf = data;
++
++	mutex_lock(&ctx->idata->lock);
++	if (ctx->length && ctx->length != length)
++		ret = -EINVAL;
++	else
++		ret = ir_spi_transfer(ctx->idata, &xfer);
++	mutex_unlock(&ctx->idata->lock);
++	kfree(data);
++
++	return ret ? ret : length;
++}
++
++static const struct file_operations ir_spi_legacy_fops = {
++	.owner = THIS_MODULE,
++	.open = ir_spi_legacy_open,
++	.release = ir_spi_legacy_close,
++	.write = ir_spi_legacy_write,
++	.unlocked_ioctl = ir_spi_legacy_ioctl,
++#ifdef CONFIG_COMPAT
++	.compat_ioctl = ir_spi_legacy_ioctl,
++#endif
++	.llseek = no_llseek,
+ };
+ 
+ static int ir_spi_tx(struct rc_dev *dev,
+@@ -40,6 +194,8 @@ static int ir_spi_tx(struct rc_dev *dev,
+ 	struct ir_spi_data *idata = dev->priv;
+ 	struct spi_transfer xfer;
+ 
++	mutex_lock(&idata->lock);
++
+ 	/* convert the pulse/space signal to raw binary signal */
+ 	for (i = 0; i < count; i++) {
+ 		unsigned int periods;
+@@ -48,8 +204,10 @@ static int ir_spi_tx(struct rc_dev *dev,
+ 
+ 		periods = DIV_ROUND_CLOSEST(buffer[i] * idata->freq, 1000000);
+ 
+-		if (len + periods >= IR_SPI_MAX_BUFSIZE)
+-			return -EINVAL;
++		if (len + periods >= IR_SPI_MAX_BUFSIZE) {
++			ret = -EINVAL;
++			goto out_unlock;
++		}
+ 
+ 		/*
+ 		 * the first value in buffer is a pulse, so that 0, 2, 4, ...
+@@ -67,16 +225,9 @@ static int ir_spi_tx(struct rc_dev *dev,
+ 	xfer.len = len * sizeof(*idata->tx_buf);
+ 	xfer.tx_buf = idata->tx_buf;
+ 
+-	ret = regulator_enable(idata->regulator);
+-	if (ret)
+-		return ret;
+-
+-	ret = spi_sync_transfer(idata->spi, &xfer, 1);
+-	if (ret)
+-		dev_err(&idata->spi->dev, "unable to deliver the signal\n");
+-
+-	regulator_disable(idata->regulator);
+-
++	ret = ir_spi_transfer(idata, &xfer);
++out_unlock:
++	mutex_unlock(&idata->lock);
+ 	return ret ? ret : count;
+ }
+ 
+@@ -115,10 +266,16 @@ static int ir_spi_probe(struct spi_device *spi)
+ 	u8 dc;
+ 	struct ir_spi_data *idata;
+ 
+-	idata = devm_kzalloc(&spi->dev, sizeof(*idata), GFP_KERNEL);
++	idata = kzalloc(sizeof(*idata), GFP_KERNEL);
+ 	if (!idata)
+ 		return -ENOMEM;
+ 
++	mutex_init(&idata->lock);
++	kref_init(&idata->ref);
++	ret = devm_add_action_or_reset(&spi->dev, ir_spi_release_data, idata);
++	if (ret)
++		return ret;
++
+ 	idata->regulator = devm_regulator_get(&spi->dev, "irda_regulator");
+ 	if (IS_ERR(idata->regulator))
+ 		return PTR_ERR(idata->regulator);
+@@ -149,16 +306,41 @@ static int ir_spi_probe(struct spi_device *spi)
+ 
+ 	idata->freq = IR_SPI_DEFAULT_FREQUENCY;
+ 
+-	return devm_rc_register_device(&spi->dev, idata->rc);
++	idata->legacy.minor = MISC_DYNAMIC_MINOR;
++	idata->legacy.name = "ir_spi";
++	idata->legacy.fops = &ir_spi_legacy_fops;
++	idata->legacy.parent = &spi->dev;
++	ret = misc_register(&idata->legacy);
++	if (ret)
++		return ret;
++
++	ret = devm_rc_register_device(&spi->dev, idata->rc);
++	if (ret) {
++		misc_deregister(&idata->legacy);
++		mutex_lock(&idata->lock);
++		idata->spi = NULL;
++		mutex_unlock(&idata->lock);
++		return ret;
++	}
++
++	spi_set_drvdata(spi, idata);
++	return 0;
+ }
+ 
+ static int ir_spi_remove(struct spi_device *spi)
+ {
++	struct ir_spi_data *idata = spi_get_drvdata(spi);
++
++	misc_deregister(&idata->legacy);
++	mutex_lock(&idata->lock);
++	idata->spi = NULL;
++	mutex_unlock(&idata->lock);
+ 	return 0;
+ }
+ 
+ static const struct of_device_id ir_spi_of_match[] = {
+ 	{ .compatible = "ir-spi-led" },
++	{ .compatible = "ir-spi" },
+ 	{},
+ };
+ MODULE_DEVICE_TABLE(of, ir_spi_of_match);
+-- 
+2.53.0
+
