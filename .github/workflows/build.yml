@@ -12,7 +12,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # The pinned Neutron linker requires the libxml2.so.2 runtime.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Install dependencies
