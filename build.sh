@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 KERNEL_DIR=$(pwd)
 CLANG="neutron"
 TC_DIR="$HOME/toolchains/$CLANG-clang"
@@ -103,6 +104,10 @@ mkdir -p $HOME/vayu/kernel-out
 make $PROC "${MAKE_PARAMS[@]}" $DEFCONFIG 
 echo -e "\nStarting compilation...\n"
 make $PROC "${MAKE_PARAMS[@]}"
+if [ ! -s "$OUT/arch/arm64/boot/Image" ]; then
+    echo "ERROR: kernel Image was not produced; refusing to package a release." >&2
+    exit 1
+fi
 
 # Creating zip flashable file
 function create_zip {
@@ -129,5 +134,6 @@ if [ -f "$OUT/arch/arm64/boot/Image" ]; then
 	create_zip
 	echo -e "\nDone !"
 else
-	echo -e "\nFailed!"
+	echo "ERROR: kernel Image missing after compilation." >&2
+	exit 1
 fi
