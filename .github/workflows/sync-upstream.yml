@@ -14,71 +14,145 @@ permissions:
   contents: write
 
 jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.branches.outputs.matrix }}
+    steps:
+      - name: Select branches
+        id: branches
+        env:
+          TARGET_BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          selected = os.environ.get("TARGET_BRANCH", "")
+          branches = ["17.0", "nethunter"]
+          if selected:
+              if selected not in branches:
+                  raise SystemExit(f"Unsupported branch: {selected}")
+              branches = [selected]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("matrix=" + json.dumps({"branch": branches}) + "\n")
+          PY
+
   sync:
+    needs: select
     runs-on: ubuntu-latest
     name: sync (${{ matrix.branch }})
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - branch: "16.0"
-            upstream_branch: "16.0"
-            patches_dir: "16.0"
-          - branch: nethunter
-            upstream_branch: "16.0"
-            patches_dir: nethunter
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
+    concurrency:
+      group: upstream-sync-${{ matrix.branch }}
+      cancel-in-progress: false
+    env:
+      KERNEL_BRANCH: ${{ matrix.branch }}
+      UPSTREAM_BRANCH: "17.0"
 
     steps:
-      - name: Skip if not selected
-        if: ${{ github.event.inputs.branch != '' && github.event.inputs.branch != matrix.branch }}
-        run: exit 0
-
       - name: Checkout kernel branch
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
           fetch-depth: 0
 
-      - name: Configure git
+      - name: Configure git and record branch head
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "PREVIOUS_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Fetch patches
+      - name: Fetch saved patches
         run: |
-          git fetch origin patches
-          mkdir -p /tmp/patches
-          if git ls-tree origin/patches "patches/${{ matrix.patches_dir }}" > /dev/null 2>&1; then
-            git checkout origin/patches -- "patches/${{ matrix.patches_dir }}/"
-            cp "patches/${{ matrix.patches_dir }}/"*.patch /tmp/patches/
-            git checkout -- .
-          else
-            echo "No patches found for ${{ matrix.patches_dir }}"
-          fi
+          git fetch origin patches:refs/remotes/origin/patches
+          echo "PATCHES_HEAD=$(git rev-parse origin/patches)" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/patch-series"
+          git archive origin/patches "patches/common" "patches/$KERNEL_BRANCH" |
+            tar -x -C "$RUNNER_TEMP/patch-series"
 
-      - name: Fetch upstream
+      - name: Fetch upstream 17.0
         run: |
           git remote add upstream https://github.com/crdroidandroid/android_kernel_xiaomi_sm8150.git
-          git fetch upstream ${{ matrix.upstream_branch }}
+          git fetch upstream "$UPSTREAM_BRANCH"
+          echo "UPSTREAM_HEAD=$(git rev-parse FETCH_HEAD)" >> "$GITHUB_ENV"
 
       - name: Reset to upstream
-        run: git reset --hard upstream/${{ matrix.upstream_branch }}
+        run: git reset --hard "$UPSTREAM_HEAD"
 
-      - name: Apply patches
+      - name: Apply shared and branch patches
         run: |
-          patches=$(ls /tmp/patches/*.patch 2>/dev/null | sort)
-          if [ -z "$patches" ]; then
-            echo "No patches to apply"
-          else
-            for patch in $patches; do
-              echo "Applying: $(basename $patch)"
-              git am "$patch" || {
-                echo "::error::Failed to apply $(basename $patch)"
-                git am --abort
-                exit 1
-              }
-            done
+          shopt -s nullglob
+          patches=(
+            "$RUNNER_TEMP/patch-series/patches/common/"*.patch
+            "$RUNNER_TEMP/patch-series/patches/$KERNEL_BRANCH/"*.patch
+          )
+          if (( ${#patches[@]} == 0 )); then
+            echo "::error::No saved patches found"
+            exit 1
           fi
+          for patch in "${patches[@]}"; do
+            echo "Applying: $(basename "$patch")"
+            git am --3way "$patch" || {
+              echo "::error::Failed to apply $(basename "$patch")"
+              git am --abort
+              exit 1
+            }
+          done
 
-      - name: Force push
-        run: git push origin ${{ matrix.branch }} --force
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+      - name: Prepare NetHunter configuration dependencies
+        if: matrix.branch == 'nethunter'
+        run: |
+          git clone --depth=1 --branch master https://github.com/Loukious/rtw88.git drivers/staging/rtw88
+          git clone --depth=1 --branch main https://github.com/V0lk3n/usb-can-2-module.git drivers/net/can/usb-can-2-module
+          git clone --depth=1 --branch master https://github.com/Loukious/can-isotp.git drivers/net/can/can-isotp
+
+      - name: Validate configuration and compile IR and KernelSU integration
+        run: |
+          if [[ "$KERNEL_BRANCH" == nethunter ]]; then
+            defconfig=nethunter_defconfig
+          else
+            defconfig=vayu_user_defconfig
+          fi
+          make_args=(
+            O="$RUNNER_TEMP/kernel-check"
+            ARCH=arm64
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabihf-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabihf-
+            CC=aarch64-linux-gnu-gcc
+            HOSTCC=gcc
+          )
+          make "${make_args[@]}" "$defconfig"
+          for option in CONFIG_KSU=y CONFIG_KSU_SUSFS=y CONFIG_IR_SPI=y CONFIG_MACH_XIAOMI_VAYU=y; do
+            if ! grep -qx "$option" "$RUNNER_TEMP/kernel-check/.config"; then
+              echo "::error::Required configuration missing: $option"
+              exit 1
+            fi
+          done
+          make -j"$(nproc)" "${make_args[@]}" \
+            drivers/media/rc/ir-spi.o drivers/kernelsu/ fs/susfs.o \
+            fs/namespace.o fs/namei.o fs/proc/task_mmu.o kernel/cred.o
+
+      - name: Publish synchronized branch
+        run: |
+          git push origin "HEAD:refs/heads/$KERNEL_BRANCH" \
+            "--force-with-lease=refs/heads/$KERNEL_BRANCH:$PREVIOUS_HEAD"
+
+      - name: Record synchronization result
+        if: always()
+        run: |
+          {
+            echo "## Sync $KERNEL_BRANCH from crDroid $UPSTREAM_BRANCH"
+            echo "- Upstream: ${UPSTREAM_HEAD:-not fetched}"
+            echo "- Patches: ${PATCHES_HEAD:-not fetched}"
+            echo "- Previous branch head: ${PREVIOUS_HEAD:-not checked out}"
+            echo "- Resulting commit: $(git rev-parse HEAD 2>/dev/null || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
