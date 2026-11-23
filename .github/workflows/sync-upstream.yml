@@ -105,7 +105,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+            clang lld llvm gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
 
       - name: Prepare NetHunter configuration dependencies
         if: matrix.branch == 'nethunter'
@@ -127,8 +127,15 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu-
             CROSS_COMPILE_ARM32=arm-linux-gnueabihf-
             CROSS_COMPILE_COMPAT=arm-linux-gnueabihf-
-            CC=aarch64-linux-gnu-gcc
-            HOSTCC=gcc
+            CC=clang
+            HOSTCC=clang
+            LD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            STRIP=llvm-strip
+            CLANG_TRIPLE=aarch64-linux-gnu-
           )
           make "${make_args[@]}" "$defconfig"
           for option in CONFIG_KSU=y CONFIG_KSU_SUSFS=y CONFIG_IR_SPI=y CONFIG_MACH_XIAOMI_VAYU=y; do
