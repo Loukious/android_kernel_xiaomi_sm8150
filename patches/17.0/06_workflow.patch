@@ -1,20 +1,21 @@
-From 3c0403394d2574381dd5bd8c68770014f031a9df Mon Sep 17 00:00:00 2001
+From be0e3a57ac001621c71bd64133b07078ed90f537 Mon Sep 17 00:00:00 2001
 From: Loukious <24696530+Loukious@users.noreply.github.com>
-Date: Thu, 16 Apr 2026 23:30:23 +0100
-Subject: [PATCH] Add GitHub Actions workflow for kernel build and release
+Date: Mon, 23 Nov 2026 17:03:26 +0100
+Subject: [PATCH] ci: build and release kernels with short source paths and
+ write permissions
 
 ---
- .github/workflows/build.yml | 95 +++++++++++++++++++++++++++++++++++++
+ .github/workflows/build.yml | 99 +++++++++++++++++++++++++++++++++++++
  .gitignore                  |  1 +
- 2 files changed, 96 insertions(+)
+ 2 files changed, 100 insertions(+)
  create mode 100644 .github/workflows/build.yml
 
 diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
 new file mode 100644
-index 000000000000..f014e6cfdd37
+index 0000000000000000000000000000000000000000..6499c4e895d28d15b4e65b73e9582ae3bd77dc48
 --- /dev/null
 +++ b/.github/workflows/build.yml
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,99 @@
 +name: Build Kernel & Release
 +
 +on:
@@ -27,6 +28,9 @@ index 000000000000..f014e6cfdd37
 +        description: 'Changelog for the release'
 +        required: false
 +
++permissions:
++  contents: write
++
 +jobs:
 +  build:
 +    runs-on: ubuntu-latest
@@ -37,7 +41,7 @@ index 000000000000..f014e6cfdd37
 +          sudo apt-get update
 +          sudo apt-get install -y bc bison build-essential ccache curl flex \
 +            g++-multilib gcc-multilib git gnupg gperf libfuse-dev libncurses5-dev \
-+            libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 \
++            libelf-dev lz4 libsdl1.2-dev libssl-dev libxml2-dev \
 +            libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
 +            xsltproc zip zlib1g-dev python3 perl cpio kmod \
 +            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
@@ -110,8 +114,9 @@ index 000000000000..f014e6cfdd37
 +            /k/CrDroid-*.zip
 +        env:
 +          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++
 diff --git a/.gitignore b/.gitignore
-index 5b44254427be..3cc206b0d8b7 100644
+index 5b44254427be15508ba3cb6cc52ef5d15d114f00..3cc206b0d8b782969ec3fc3e89b6b2044206852e 100644
 --- a/.gitignore
 +++ b/.gitignore
 @@ -10,6 +10,7 @@
@@ -122,3 +127,6 @@ index 5b44254427be..3cc206b0d8b7 100644
  *.a
  *.bin
  *.bz2
+-- 
+2.53.0
+
