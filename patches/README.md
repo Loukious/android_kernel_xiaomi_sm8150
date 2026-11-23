@@ -25,6 +25,11 @@ and [Infinity-X's maintainer kernel](https://github.com/tejas101k/kernel_xiaomi_
 Use the native legacy node; a symlink between it and the LIRC node cannot
 translate their different ioctl/write protocols.
 
+- `02_credential_counter_compat.patch` retains 17.0's `atomic_long_t`
+  credential reference counts and upstream `group_info` layout. This keeps
+  the `get_cred_rcu` backport consistent with its atomic-long operations and
+  avoids importing the unrelated 16.0 APatch layout changes.
+
 ## Branch patches and validation
 
 `17.0/` retains the regular vayu configuration, build script, and workflow.
