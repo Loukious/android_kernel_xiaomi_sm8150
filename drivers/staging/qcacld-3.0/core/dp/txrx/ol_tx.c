@@ -181,11 +181,15 @@ ol_txrx_mgmt_send_ext(struct cdp_soc_t *soc_hdl, uint8_t vdev_id,
 	struct ol_tx_desc_t *tx_desc;
 	struct ol_txrx_msdu_info_t tx_msdu_info;
 	int result = 0;
+	void *mgmt_pool_dbg = NULL;
 
 	if (!vdev || !vdev->pdev)
 		return QDF_STATUS_E_FAULT;
 
 	pdev = vdev->pdev;
+#ifdef QCA_LL_TX_FLOW_GLOBAL_MGMT_POOL
+	mgmt_pool_dbg = pdev->mgmt_pool;
+#endif
 	tx_msdu_info.tso_info.is_tso = 0;
 
 	tx_msdu_info.htt.action.use_6mbps = use_6mbps;
@@ -237,9 +241,13 @@ ol_txrx_mgmt_send_ext(struct cdp_soc_t *soc_hdl, uint8_t vdev_id,
 	tx_msdu_info.peer = NULL;
 
 	tx_desc = ol_txrx_mgmt_tx_desc_alloc(pdev, vdev, tx_mgmt_frm,
-							&tx_msdu_info);
-	if (!tx_desc)
+					     &tx_msdu_info);
+	if (!tx_desc) {
+		ol_txrx_err("mgmt tx desc alloc failed: vdev=%u type=%u chanfreq=%u mgmt_pool=%pK vdev_pool=%pK",
+			    vdev->vdev_id, type, chanfreq, mgmt_pool_dbg,
+			    vdev->pool);
 		return -EINVAL;       /* can't accept the tx mgmt frame */
+	}
 
 	TXRX_STATS_MSDU_INCR(pdev, tx.mgmt, tx_mgmt_frm);
 	TXRX_ASSERT1(type < OL_TXRX_MGMT_NUM_TYPES);
