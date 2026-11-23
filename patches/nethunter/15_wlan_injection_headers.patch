@@ -1,0 +1,103 @@
+From c7226813ffe8efea96014690b743a18b966e8089 Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 17:30:14 +0100
+Subject: [PATCH] wifi: export NetHunter injection headers in flattened include
+ directory
+
+crDroid 17.0 builds qcacld using the flattened inc directory. Export all new HDD and WMA injection headers using the existing symlink layout so their includes resolve without adding long include-path lists.
+---
+ drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject.h           | 1 +
+ drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_debug.h     | 1 +
+ .../staging/qcacld-3.0/inc/wlan_hdd_frame_inject_integration.h   | 1 +
+ .../staging/qcacld-3.0/inc/wlan_hdd_frame_inject_security_test.h | 1 +
+ drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_test.h      | 1 +
+ drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate.h         | 1 +
+ drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate_test.h    | 1 +
+ drivers/staging/qcacld-3.0/inc/wlan_hdd_inject_security.h        | 1 +
+ drivers/staging/qcacld-3.0/inc/wma_frame_inject.h                | 1 +
+ 9 files changed, 9 insertions(+)
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_debug.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_integration.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_security_test.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_test.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate_test.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wlan_hdd_inject_security.h
+ create mode 120000 drivers/staging/qcacld-3.0/inc/wma_frame_inject.h
+
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..f53445ce80fb129ce245c9ee59f9357fe92a7e69
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_inject.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_debug.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_debug.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..a25d430656c037c09397bee9bfc2ec77b27a07dd
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_debug.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_inject_debug.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_integration.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_integration.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..b363e9769f5c9785123e72a950a3651123fc7199
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_integration.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_inject_integration.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_security_test.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_security_test.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..53ee1406b7eac86f40ed00b21c6cf3298f940834
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_security_test.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_inject_security_test.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_test.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_test.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..8c0ac8a1e7846dc3438f2682fb0a33bc83d8c328
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_inject_test.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_inject_test.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..ec6dc17a81e57eeb85b24c184c1936583dd6ee23
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_validate.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate_test.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate_test.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..1a83b19b6cd9b4f3bfb9f1f24d9547a0615109a7
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_frame_validate_test.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_frame_validate_test.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wlan_hdd_inject_security.h b/drivers/staging/qcacld-3.0/inc/wlan_hdd_inject_security.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..1ac4c810b66f1f31abdf9ebefe0cd49a8699b530
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wlan_hdd_inject_security.h
+@@ -0,0 +1 @@
++../core/hdd/inc/wlan_hdd_inject_security.h
+\ No newline at end of file
+diff --git a/drivers/staging/qcacld-3.0/inc/wma_frame_inject.h b/drivers/staging/qcacld-3.0/inc/wma_frame_inject.h
+new file mode 120000
+index 0000000000000000000000000000000000000000..5a542fd8253ae27efa7464ec66dd16e74882590b
+--- /dev/null
++++ b/drivers/staging/qcacld-3.0/inc/wma_frame_inject.h
+@@ -0,0 +1 @@
++../core/wma/inc/wma_frame_inject.h
+\ No newline at end of file
+-- 
+2.53.0
+
