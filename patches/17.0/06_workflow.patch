@@ -1,21 +1,21 @@
-From be0e3a57ac001621c71bd64133b07078ed90f537 Mon Sep 17 00:00:00 2001
+From 33aa5fe1d3b889a90d2480807f36a4d6e6911408 Mon Sep 17 00:00:00 2001
 From: Loukious <24696530+Loukious@users.noreply.github.com>
-Date: Mon, 23 Nov 2026 17:03:26 +0100
-Subject: [PATCH] ci: build and release kernels with short source paths and
- write permissions
+Date: Mon, 23 Nov 2026 17:13:05 +0100
+Subject: [PATCH] ci: build releases on Ubuntu 24.04 with Neutron runtime
+ dependencies
 
 ---
- .github/workflows/build.yml | 99 +++++++++++++++++++++++++++++++++++++
- .gitignore                  |  1 +
- 2 files changed, 100 insertions(+)
+ .github/workflows/build.yml | 100 ++++++++++++++++++++++++++++++++++++
+ .gitignore                  |   1 +
+ 2 files changed, 101 insertions(+)
  create mode 100644 .github/workflows/build.yml
 
 diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
 new file mode 100644
-index 0000000000000000000000000000000000000000..6499c4e895d28d15b4e65b73e9582ae3bd77dc48
+index 0000000000000000000000000000000000000000..8d2f0a2140e4e0ea0b60c1a6dc964d2463f119e7
 --- /dev/null
 +++ b/.github/workflows/build.yml
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,100 @@
 +name: Build Kernel & Release
 +
 +on:
@@ -33,7 +33,8 @@ index 0000000000000000000000000000000000000000..6499c4e895d28d15b4e65b73e9582ae3
 +
 +jobs:
 +  build:
-+    runs-on: ubuntu-latest
++    # The pinned Neutron linker requires the libxml2.so.2 runtime.
++    runs-on: ubuntu-24.04
 +
 +    steps:
 +      - name: Install dependencies
