@@ -26,6 +26,9 @@
 #include "wlan_hdd_trace.h"
 #include "wlan_hdd_ioctl.h"
 #include "wlan_hdd_power.h"
+#ifdef FEATURE_FRAME_INJECTION_SUPPORT
+#include "wlan_hdd_frame_inject.h"
+#endif
 #include "wlan_hdd_regulatory.h"
 #include "wlan_osif_request_manager.h"
 #include "wlan_hdd_driver_ops.h"
@@ -8359,8 +8362,18 @@ static int hdd_driver_command(struct hdd_adapter *adapter,
 	/* Make sure the command is NUL-terminated */
 	command[priv_data->total_len] = '\0';
 
-	hdd_debug("%s: %s", adapter->dev->name, command);
+	{
+		char *cmd_str = (char *)command;
+		const char *sep = strchrnul(cmd_str, ' ');
+		int token_len = sep - cmd_str;
+
+		hdd_nofl_info("%s(vdevid-%d): private ioctl cmd='%.*s' total_len=%d",
+			      adapter->dev->name, adapter->vdev_id,
+			      token_len, cmd_str, priv_data->total_len);
+	}
 	ret = hdd_drv_cmd_process(adapter, command, priv_data);
+	hdd_nofl_info("%s(vdevid-%d): private ioctl processed rc=%d",
+		      adapter->dev->name, adapter->vdev_id, ret);
 
 exit:
 	if (command)
@@ -8472,15 +8485,29 @@ static int __hdd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	if (ret)
 		goto exit;
 
+	hdd_info("Received ioctl command: 0x%x", cmd);
+	
 	switch (cmd) {
 	case (SIOCDEVPRIVATE + 1):
+		hdd_info("Processing SIOCDEVPRIVATE+1 ioctl");
 		if (in_compat_syscall())
 			ret = hdd_driver_compat_ioctl(adapter, ifr);
 		else
 			ret = hdd_driver_ioctl(adapter, ifr);
 		break;
+#ifdef FEATURE_FRAME_INJECTION_SUPPORT
+	case SIOCDEVPRIVATE_FRAME_INJECT:
+		hdd_info("Processing frame injection ioctl: 0x%x", cmd);
+		ret = hdd_frame_inject_ioctl(dev, ifr, cmd);
+		break;
+#else
+	case SIOCDEVPRIVATE_FRAME_INJECT:
+		hdd_warn("Frame injection not compiled in");
+		ret = -EOPNOTSUPP;
+		break;
+#endif
 	default:
-		hdd_warn("unknown ioctl %d", cmd);
+		hdd_warn("unknown ioctl 0x%x", cmd);
 		ret = -EINVAL;
 		break;
 	}
@@ -8515,4 +8542,3 @@ int hdd_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 
 	return errno;
 }
-
