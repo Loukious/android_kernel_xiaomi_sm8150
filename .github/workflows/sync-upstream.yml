@@ -144,6 +144,8 @@ jobs:
               exit 1
             fi
           done
+          # KernelSU includes the generated SELinux flask/permission headers.
+          make -j"$(nproc)" "${make_args[@]}" security/selinux/
           make -j"$(nproc)" "${make_args[@]}" \
             drivers/media/rc/ir-spi.o drivers/kernelsu/ fs/susfs.o \
             fs/namespace.o fs/namei.o fs/proc/task_mmu.o kernel/cred.o
