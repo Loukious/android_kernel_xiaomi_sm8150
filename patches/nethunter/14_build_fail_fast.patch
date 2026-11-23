@@ -1,0 +1,57 @@
+From 30201ca0e704781d61dca823210deff47b717e3f Mon Sep 17 00:00:00 2001
+From: Loukious <24696530+Loukious@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 16:58:38 +0100
+Subject: [PATCH] build: stop on errors and require compiled release artifacts
+
+---
+ build.sh | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/build.sh b/build.sh
+index 16f69769a715b8862fe627a1400fc0d9baa256db..138215f6fd852ca6256a56f516bdc19b7a1d04e1 100755
+--- a/build.sh
++++ b/build.sh
+@@ -1,4 +1,5 @@
+ #!/bin/bash
++set -e
+ KERNEL_DIR=$(pwd)
+ CLANG="neutron"
+ TC_DIR="$HOME/toolchains/$CLANG-clang"
+@@ -126,7 +127,15 @@ function create_modules_zip {
+ 	# Clean old modules before copying fresh ones
+ 	rm -rf "${KERNEL_DIR}/modules/system/lib/modules"
+ 	mkdir -p "${KERNEL_DIR}/modules/system/lib/modules"
++    if [ ! -d "${OUT}/modules" ]; then
++        echo "ERROR: modules_install output is missing." >&2
++        exit 1
++    fi
+     find "${OUT}/modules" -type f -iname '*.ko' -exec cp {} "${KERNEL_DIR}/modules/system/lib/modules/" \;
++    if ! find "${KERNEL_DIR}/modules/system/lib/modules" -maxdepth 1 -name '*.ko' -print -quit | grep -q .; then
++        echo "ERROR: no compiled kernel modules were installed." >&2
++        exit 1
++    fi
+     cd "${KERNEL_DIR}/modules" || exit 1
+     zip -r9 "../$MZIPNAME" . -x ".git*" "README.md" "*/placeholder" "LICENSE" "*.zip"
+     echo -e "\n\e[1;32m[✓] Built Modules and packaged into $MZIPNAME! \e[0m"
+@@ -137,6 +146,10 @@ mkdir -p $HOME/vayu/kernel-out
+ make $PROC "${MAKE_PARAMS[@]}" $DEFCONFIG
+ echo -e "\nStarting compilation...\n"
+ make $PROC "${MAKE_PARAMS[@]}"
++if [ ! -s "$OUT/arch/arm64/boot/Image" ]; then
++    echo "ERROR: kernel Image was not produced; refusing to package a release." >&2
++    exit 1
++fi
+ make $PROC "${MAKE_PARAMS[@]}" modules_install INSTALL_MOD_PATH="${OUT}/modules"
+ if [ ! -d "${KERNEL_DIR}/modules" ]; then
+ 	echo -e "\n\e[1;93m[*] Cloning modules repository! \e[0m"
+@@ -180,5 +193,6 @@ if [ -f "$OUT/arch/arm64/boot/Image" ]; then
+ 	create_zip
+ 	echo -e "\nDone !"
+ else
+-	echo -e "\nFailed!"
++	echo "ERROR: kernel Image missing after compilation." >&2
++	exit 1
+ fi
+-- 
+2.53.0
+
