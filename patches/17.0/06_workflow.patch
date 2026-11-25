@@ -5,17 +5,17 @@ Subject: [PATCH] ci: build releases on Ubuntu 24.04 with Neutron runtime
  dependencies
 
 ---
- .github/workflows/build.yml | 100 ++++++++++++++++++++++++++++++++++++
+ .github/workflows/build.yml |  99 ++++++++++++++++++++++++++++++++++++
  .gitignore                  |   1 +
- 2 files changed, 101 insertions(+)
+ 2 files changed, 100 insertions(+)
  create mode 100644 .github/workflows/build.yml
 
 diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
 new file mode 100644
-index 0000000000000000000000000000000000000000..8d2f0a2140e4e0ea0b60c1a6dc964d2463f119e7
+index 0000000000000000000000000000000000000000..4d627af539c17c8797984eb23014720874d10b12
 --- /dev/null
 +++ b/.github/workflows/build.yml
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,99 @@
 +name: Build Kernel & Release
 +
 +on:
@@ -115,7 +115,6 @@ index 0000000000000000000000000000000000000000..8d2f0a2140e4e0ea0b60c1a6dc964d24
 +            /k/CrDroid-*.zip
 +        env:
 +          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-+
 diff --git a/.gitignore b/.gitignore
 index 5b44254427be15508ba3cb6cc52ef5d15d114f00..3cc206b0d8b782969ec3fc3e89b6b2044206852e 100644
 --- a/.gitignore
