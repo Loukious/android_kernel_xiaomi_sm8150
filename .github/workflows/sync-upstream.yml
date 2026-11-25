@@ -101,6 +101,9 @@ jobs:
             }
           done
 
+      - name: Preserve repository workflows
+        run: git restore --source="$PREVIOUS_HEAD" -- .github/workflows
+
       - name: Install validation tools
         run: |
           sudo apt-get update
